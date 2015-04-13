@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from StringIO import StringIO
 import argparse
+import numpy as np
 import pandas as pd
 import re
 import sys
@@ -40,6 +41,19 @@ def _remove_unnecessary_columns(df):
 
     return df
 
+def _melt_df(df):
+    try:
+        return pd.melt(df,
+                       id_vars=list(_REQUIRED_COLUMNS),
+                       var_name="Sample",
+                       value_name="Sample_Data")
+    except Exception as e :
+        raise BaseException("Cannot melt dataframe. {0}".format(e))
+
+def _pivot_df(df):
+    df["dbNSFP_rollup_damaging"] = df["dbNSFP_rollup_damaging"].apply(lambda x: int(x))
+    return pd.pivot_table(df, index=["GENE_SYMBOL"], columns=["Sample"], values=["dbNSFP_rollup_damaging"], aggfunc=np.sum)
+
 def _add_arg_parse(args):
     parser = argparse.ArgumentParser()
     #pylint: disable=line-too-long
@@ -52,6 +66,9 @@ def main():
     args = _add_arg_parse(sys.argv[1:])
     initial_df = _create_df(args.input_file)
     _validate_df(initial_df)
+    condensed_df = _remove_unnecessary_columns(inital_df)
+    melted_df = _melt_df(condensed_df)
+    pivoted_df = _pivot_df(melted_df)
 
 if __name__ == "__main__":
     main()
