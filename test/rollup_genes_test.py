@@ -10,6 +10,8 @@ from testfixtures import TempDirectory
 import geneRollup.rollup_genes as rollup_genes
 import pandas as pd
 
+#TODO: (jebene) - hook up dataframe() so that it actually returns a valid df
+#TODO: (jebene) - these tests are not very good....alter them to use dataframe()
 def dataframe(input_data, sep="|", index_col=None):
     return pd.read_csv(StringIO(input_data), sep=sep, header=False, dtype='str', index_col=index_col)
 
@@ -78,10 +80,22 @@ class GeneRollupTestCase(unittest.TestCase):
             input_dir.write("input.tsv", "GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_CONS_SOM_Sample\tJQ_CONS_SOM_Sample_Data\nBRCA1\t3\tJQ_CONS_SOM_A\t2\nBRCA1\t4\tJQ_CONS_SOM_B\t3")
             input_file = os.path.join(input_dir.path, "input.tsv")
             df = rollup_genes._create_df(input_file)
+            melted_df = rollup_genes._melt_df(df)
 
-            actual_df = rollup_genes._pivot_df(df)
-            self.assertEquals(["dbNSFP_rollup_damaging"],
+            actual_df = rollup_genes._pivot_df(melted_df)
+            self.assertEquals([("dbNSFP_rollup_damaging", "JQ_CONS_SOM_Sample"), ("dbNSFP_rollup_damaging", "JQ_CONS_SOM_Sample_Data")],
                               list(actual_df.columns.values))
-            self.assertEquals([3], list(actual_df.values[0]))
+            self.assertEquals([7,7], list(actual_df.values[0]))
 
+    def test_rename_columns(self):
+        with TempDirectory() as input_dir:
+            input_dir.write("input.tsv", "GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_CONS_SOM|P1|NORMAL\tJQ_CONS_SOM|P1|TUMOR\nBRCA1\t3\tJQ_CONS_SOM_A\t2\nBRCA1\t4\tJQ_CONS_SOM_B\t3")
+            input_file = os.path.join(input_dir.path, "input.tsv")
+            initial_df = rollup_genes._create_df(input_file)
+            melted_df = rollup_genes._melt_df(initial_df)
+            pivoted_df = rollup_genes._pivot_df(melted_df)
+
+            rearranged_df = rollup_genes._rearrange_columns(pivoted_df)
+            self.assertEquals("dbNSFP|damaging votes|P1|NORMAL", rearranged_df.columns[0])
+            self.assertEquals("dbNSFP|damaging votes|P1|TUMOR", rearranged_df.columns[1])
 

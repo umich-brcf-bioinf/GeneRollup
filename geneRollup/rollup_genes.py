@@ -7,6 +7,7 @@ import sys
 
 _REQUIRED_COLUMNS = set(["GENE_SYMBOL", "dbNSFP_rollup_damaging"])
 _SAMPLENAME_REGEX = "JQ_CONS_SOM.*"
+_DAMAGING_LABEL = "damaging votes"
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -58,6 +59,26 @@ def _pivot_df(initial_df):
                           values=["dbNSFP_rollup_damaging"],
                           aggfunc=sum)
 
+def _rearrange_columns(initial_df):
+    new_column_names = []
+    for column_name in list(initial_df.columns.values):
+        if type(column_name) is tuple:
+            full_source_name, full_sample_name = column_name
+            source = full_source_name.split("_")[0]
+
+            patient_prefix = full_sample_name.split("|")[1]
+            patient_suffix = full_sample_name.split("|")[2]
+
+            new_column_name = "|".join([source,
+                                        _DAMAGING_LABEL,
+                                        patient_prefix,
+                                        patient_suffix])
+
+        new_column_names.append(new_column_name)
+    initial_df.columns = new_column_names
+
+    return initial_df
+
 def _add_arg_parse(args):
     parser = argparse.ArgumentParser()
     #pylint: disable=line-too-long
@@ -68,10 +89,14 @@ def _add_arg_parse(args):
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
+
     initial_df = _create_df(args.input_file)
     condensed_df = _remove_unnecessary_columns(initial_df)
     melted_df = _melt_df(condensed_df)
     pivoted_df = _pivot_df(melted_df)
+    rearranged_df = _rearrange_columns(pivoted_df)
+
+    rearranged_df.to_csv(args.output_file, sep="\t", index=True)
 
 if __name__ == "__main__":
     main()
