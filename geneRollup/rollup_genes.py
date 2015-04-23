@@ -16,7 +16,7 @@ def _create_df(input_file):
     return initial_df
 
 def _validate_df(initial_df):
-    msg = ("Input file is missing required headers ({})"
+    msg = ("Input file is missing required headers ({}). "
            "Review input and try again.",
            _REQUIRED_COLUMNS)
     header = set(initial_df.columns.values)
@@ -44,20 +44,26 @@ def _remove_unnecessary_columns(initial_df):
 
 def _melt_df(initial_df):
     try:
-        return pd.melt(initial_df,
-                       id_vars=list(_REQUIRED_COLUMNS),
-                       var_name="Sample",
-                       value_name="Sample_Data")
+        melted_df = pd.melt(initial_df,
+                           id_vars=list(_REQUIRED_COLUMNS),
+                           var_name="Sample",
+                           value_name="Sample_Data")
+        melted_df["dbNSFP_rollup_damaging"] = melted_df["dbNSFP_rollup_damaging"].apply(lambda x: str(x))
+        melted_df["Sample_Data"] = melted_df["Sample_Data"].apply(lambda x: str(x))
+        return melted_df
     except Exception as excep :
         raise BaseException("Cannot melt dataframe. {0}".format(excep))
 
 def _pivot_df(initial_df):
     initial_df["dbNSFP_rollup_damaging"] = initial_df["dbNSFP_rollup_damaging"].apply(lambda x: int(x))
-    return pd.pivot_table(initial_df,
+    pivoted_df = pd.pivot_table(initial_df,
                           index=["GENE_SYMBOL"],
                           columns=["Sample"],
                           values=["dbNSFP_rollup_damaging"],
                           aggfunc=sum)
+    pivoted_df = pivoted_df.applymap(lambda x: None if x == 0 else str(x))
+
+    return pivoted_df
 
 def _rearrange_columns(initial_df):
     new_column_names = []
@@ -87,16 +93,19 @@ def _add_arg_parse(args):
 
     return parser.parse_args(args)
 
-def main():
-    args = _add_arg_parse(sys.argv[1:])
-
-    initial_df = _create_df(args.input_file)
+def rollup(input_file, output_file):
+    initial_df = _create_df(input_file)
     condensed_df = _remove_unnecessary_columns(initial_df)
     melted_df = _melt_df(condensed_df)
     pivoted_df = _pivot_df(melted_df)
     rearranged_df = _rearrange_columns(pivoted_df)
 
-    rearranged_df.to_csv(args.output_file, sep="\t", index=True)
+    rearranged_df.to_csv(output_file, sep="\t", index=True)
+
+def main():
+    args = _add_arg_parse(sys.argv[1:])
+
+    rollup(args.input_file, args.output_file)
 
 if __name__ == "__main__":
     main()
