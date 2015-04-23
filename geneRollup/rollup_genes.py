@@ -48,13 +48,18 @@ def _melt_df(initial_df):
                            id_vars=list(_REQUIRED_COLUMNS),
                            var_name="Sample",
                            value_name="Sample_Data")
+        #pylint: disable=line-too-long, unnecessary-lambda
         melted_df["dbNSFP_rollup_damaging"] = melted_df["dbNSFP_rollup_damaging"].apply(lambda x: str(x))
         melted_df["Sample_Data"] = melted_df["Sample_Data"].apply(lambda x: str(x))
+
+        melted_df = melted_df[melted_df["GENE_SYMBOL"] != "."]
+
         return melted_df
     except Exception as excep :
         raise BaseException("Cannot melt dataframe. {0}".format(excep))
 
 def _pivot_df(initial_df):
+    #pylint: disable=line-too-long, unnecessary-lambda
     initial_df["dbNSFP_rollup_damaging"] = initial_df["dbNSFP_rollup_damaging"].apply(lambda x: int(x))
     pivoted_df = pd.pivot_table(initial_df,
                           index=["GENE_SYMBOL"],

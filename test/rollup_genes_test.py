@@ -67,6 +67,18 @@ BRCA1|5|3|4'''
         self.assertEquals(["BRCA1", "4", "JQ_CONS_SOM_B", "3"], list(actual_df.values[2]))
         self.assertEquals(["BRCA1", "5", "JQ_CONS_SOM_B", "4"], list(actual_df.values[3]))
 
+    def test_melt_df_excludeNullGeneSymbols(self):
+        input_string =\
+'''GENE_SYMBOL|dbNSFP_rollup_damaging|JQ_CONS_SOM_A|JQ_CONS_SOM_B
+.|4|2|3
+BRCA1|5|3|4'''
+        input_df = dataframe(input_string)
+
+        actual_df = rollup_genes._melt_df(input_df)
+
+        self.assertEquals(["BRCA1", "5", "JQ_CONS_SOM_A", "3"], list(actual_df.values[0]))
+        self.assertEquals(["BRCA1", "5", "JQ_CONS_SOM_B", "4"], list(actual_df.values[1]))
+
     def test_pivot_df(self):
         input_string =\
 '''GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
