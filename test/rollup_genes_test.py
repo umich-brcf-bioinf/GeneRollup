@@ -105,6 +105,7 @@ BRCA1|4|JQ_CONS_SOM_B|3'''
                               list(actual_df.columns.values))
         self.assertEquals([None, "4"], list(actual_df.values[0]))
 
+#TODO: determine how to alter dataframe() to account for pivoted df
     def test_rename_columns(self):
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data
@@ -114,11 +115,26 @@ BRCA1\t4\tJQ_CONS_SOM|P1|TUMOR\t3'''
         pivoted_df = rollup_genes._pivot_df(input_df)
 
         rearranged_df = rollup_genes._rearrange_columns(pivoted_df)
+
         self.assertEquals("dbNSFP|damaging votes|P1|NORMAL", rearranged_df.columns[0])
         self.assertEquals("dbNSFP|damaging votes|P1|TUMOR", rearranged_df.columns[1])
 
+#TODO: determine how to alter dataframe() to account for pivoted df
+    def test_calculate_rank(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data
+BRCA1\t3\tJQ_CONS_SOM|P1|NORMAL\t2
+BRCA1\t4\tJQ_CONS_SOM|P1|TUMOR\t3
+CREBBP\t7\tJQ_CONS_SOM|P1|NORMAL\t2'''
+        input_df = dataframe(input_string, sep="\t")
+        pivoted_df = rollup_genes._pivot_df(input_df)
+
+        ranked_df = rollup_genes._calculate_rank(pivoted_df)
+
+        self.assertEquals(["1", "2"], list(ranked_df["dbNSFP|overall damaging rank"].values))
+
 class GeneRollupFunctionalTestCase(unittest.TestCase):
-    def rollup_genes_test(self):
+    def test_rollup_genes(self):
         with TempDirectory() as output_dir:
             test_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -131,6 +147,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
             rollup_genes.rollup(input_file, output_file)
 
             expected = open(expected_file).readlines()
+
             for i, actual in enumerate(open(output_file).readlines()):
-                self.assertEquals(actual, expected[i])
+                self.assertEquals(expected[i], actual)
 

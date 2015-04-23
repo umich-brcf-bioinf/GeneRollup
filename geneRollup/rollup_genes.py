@@ -71,23 +71,51 @@ def _pivot_df(initial_df):
     return pivoted_df
 
 def _rearrange_columns(initial_df):
+    def _change_col_order(new_column_names):
+        ordered_names = []
+        damaging = ""
+        for col in new_column_names:
+            print col
+            if col == "dbNSFP|overall damaging rank":
+                damaging = col
+            else:
+                ordered_names.append(col)
+        ordered_names.insert(0, damaging)
+        return ordered_names
+
     new_column_names = []
     for column_name in list(initial_df.columns.values):
         if type(column_name) is tuple:
-            full_source_name, full_sample_name = column_name
-            source = full_source_name.split("_")[0]
+            if len(column_name[1]) > 0:
+                full_source_name, full_sample_name = column_name
+                source = full_source_name.split("_")[0]
 
-            patient_prefix = full_sample_name.split("|")[1]
-            patient_suffix = full_sample_name.split("|")[2]
+                patient_prefix = full_sample_name.split("|")[1]
+                patient_suffix = full_sample_name.split("|")[2]
 
-            new_column_name = "|".join([source,
-                                        _DAMAGING_LABEL,
-                                        patient_prefix,
-                                        patient_suffix])
+                new_column_name = "|".join([source,
+                                            _DAMAGING_LABEL,
+                                            patient_prefix,
+                                            patient_suffix])
+                new_column_names.append(new_column_name)
+            else:
+                new_column_names.append(column_name[0])
 
-        new_column_names.append(new_column_name)
     initial_df.columns = new_column_names
+    ordered_names = _change_col_order(new_column_names)
+    initial_df = initial_df[ordered_names]
 
+    return initial_df
+
+def _calculate_rank(initial_df):
+    #pylint: disable=line-too-long, unnecessary-lambda
+    initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP_rollup_damaging"].sum(axis=1)
+    initial_df = initial_df.sort("dbNSFP|overall damaging rank", ascending=0)
+    initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP|overall damaging rank"].rank(ascending=0, method="min")
+    try:
+        initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP|overall damaging rank"].apply(lambda x: str(int(x)))
+    except ValueError:
+        pass
     return initial_df
 
 def _add_arg_parse(args):
@@ -103,7 +131,8 @@ def rollup(input_file, output_file):
     condensed_df = _remove_unnecessary_columns(initial_df)
     melted_df = _melt_df(condensed_df)
     pivoted_df = _pivot_df(melted_df)
-    rearranged_df = _rearrange_columns(pivoted_df)
+    ranked_df = _calculate_rank(pivoted_df)
+    rearranged_df = _rearrange_columns(ranked_df)
 
     rearranged_df.to_csv(output_file, sep="\t", index=True)
 
