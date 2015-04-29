@@ -124,14 +124,32 @@ BRCA1\t4\tJQ_CONS_SOM|P1|TUMOR\t3'''
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data
 BRCA1\t3\tJQ_CONS_SOM|P1|NORMAL\t2
-BRCA1\t4\tJQ_CONS_SOM|P1|TUMOR\t3
+BRCA1\t3\tJQ_CONS_SOM|P1|TUMOR\t3
 CREBBP\t7\tJQ_CONS_SOM|P1|NORMAL\t2'''
         input_df = dataframe(input_string, sep="\t")
         pivoted_df = rollup_genes._pivot_df(input_df)
 
         ranked_df = rollup_genes._calculate_rank(pivoted_df)
 
-        self.assertEquals(["1", "2"], list(ranked_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals("BRCA1", ranked_df.ix[1,:].name)
+        self.assertEquals("2", ranked_df.ix[1,'dbNSFP|overall damaging rank'].values[0])
+        self.assertEquals("CREBBP", ranked_df.ix[0,:].name)
+        self.assertEquals("1", ranked_df.ix[0,'dbNSFP|overall damaging rank'].values[0])
+
+    def test_calculate_rank_tie(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data
+CREBBP\t7\tJQ_CONS_SOM|P1|NORMAL\t2
+BRCA1\t7\tJQ_CONS_SOM|P1|NORMAL\t2'''
+        input_df = dataframe(input_string, sep="\t")
+        pivoted_df = rollup_genes._pivot_df(input_df)
+
+        ranked_df = rollup_genes._calculate_rank(pivoted_df)
+
+        self.assertEquals("BRCA1", ranked_df.ix[0,:].name)
+        self.assertEquals("1", ranked_df.ix[0,'dbNSFP|overall damaging rank'].values[0])
+        self.assertEquals("CREBBP", ranked_df.ix[1,:].name)
+        self.assertEquals("1", ranked_df.ix[1,'dbNSFP|overall damaging rank'].values[0])
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
     def test_rollup_genes(self):
