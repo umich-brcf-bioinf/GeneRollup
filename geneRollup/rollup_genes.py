@@ -79,6 +79,7 @@ class SnpEff(object):
         self.score_column = "SnpEff_impact_score"
         self.possible_values = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
         self.column_label = "impact"
+        self.impact_category = "SnpEff|impact category|{}"
 
     def melt_df(self, initial_df):
         try:
@@ -140,7 +141,7 @@ class SnpEff(object):
     def _calculate_impact_score(self, initial_df):
         for item in self.possible_values:
             #pylint: disable=line-too-long
-            initial_df[item + "_sum"] = initial_df[item + "_initial_sum"].sum(axis=1)
+            initial_df[self.impact_category.format(item)] = initial_df[item + "_initial_sum"].sum(axis=1)
 
         initial_df[self.score_column] = initial_df[self.impact_rank_column]
 
