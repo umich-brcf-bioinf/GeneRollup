@@ -92,7 +92,7 @@ BRCA1|4|JQ_CONS_SOM_B|3'''
                               list(actual_df.columns.values))
         self.assertEquals(["3", "4"], list(actual_df.values[0]))
 
-    def test_pivot_df_blankIf0(self):
+    def test_pivot_df_if0(self):
         input_string =\
 '''GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
 BRCA1|0|JQ_CONS_SOM_A|2
@@ -103,7 +103,7 @@ BRCA1|4|JQ_CONS_SOM_B|3'''
 
         self.assertEquals([("dbNSFP_rollup_damaging", "JQ_CONS_SOM_A"), ("dbNSFP_rollup_damaging", "JQ_CONS_SOM_B")],
                               list(actual_df.columns.values))
-        self.assertEquals([None, "4"], list(actual_df.values[0]))
+        self.assertEquals(["0", "4"], list(actual_df.values[0]))
 
 #TODO: determine how to alter dataframe() to account for pivoted df
     def test_rename_columns(self):

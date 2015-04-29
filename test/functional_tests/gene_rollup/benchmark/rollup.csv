@@ -1,4 +1,4 @@
 GENE_SYMBOL	dbNSFP|overall damaging rank	dbNSFP|damaging votes|P1|NORMAL	dbNSFP|damaging votes|P1|TUMOR	dbNSFP|damaging votes|P2|NORMAL	dbNSFP|damaging votes|P2|TUMOR
-CREBBP	1.0	7	7	7	7
-TP53	2.0	4	4	4	4
-BRCA1					
+CREBBP	1	7	7	7	7
+TP53	2	4	4	4	4
+BRCA1	3	0	0	0	0

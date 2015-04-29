@@ -67,20 +67,19 @@ def _pivot_df(initial_df):
                           values=["dbNSFP_rollup_damaging"],
                           aggfunc=sum)
     pivoted_df = pivoted_df.applymap(lambda x: None if x == 0 else str(x))
+    pivoted_df.fillna(value="0", inplace=True)
 
     return pivoted_df
 
 def _rearrange_columns(initial_df):
     def _change_col_order(new_column_names):
         ordered_names = []
-        damaging = ""
         for col in new_column_names:
-            print col
             if col == "dbNSFP|overall damaging rank":
-                damaging = col
+                ordered_names.insert(0, col)
             else:
                 ordered_names.append(col)
-        ordered_names.insert(0, damaging)
+
         return ordered_names
 
     new_column_names = []
@@ -103,6 +102,7 @@ def _rearrange_columns(initial_df):
 
     initial_df.columns = new_column_names
     ordered_names = _change_col_order(new_column_names)
+
     initial_df = initial_df[ordered_names]
 
     return initial_df
@@ -112,10 +112,12 @@ def _calculate_rank(initial_df):
     initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP_rollup_damaging"].sum(axis=1)
     initial_df = initial_df.sort("dbNSFP|overall damaging rank", ascending=0)
     initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP|overall damaging rank"].rank(ascending=0, method="min")
+
     try:
         initial_df["dbNSFP|overall damaging rank"] = initial_df["dbNSFP|overall damaging rank"].apply(lambda x: str(int(x)))
     except ValueError:
         pass
+
     return initial_df
 
 def _add_arg_parse(args):
@@ -133,7 +135,6 @@ def rollup(input_file, output_file):
     pivoted_df = _pivot_df(melted_df)
     ranked_df = _calculate_rank(pivoted_df)
     rearranged_df = _rearrange_columns(ranked_df)
-
     rearranged_df.to_csv(output_file, sep="\t", index=True)
 
 def main():
