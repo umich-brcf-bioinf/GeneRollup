@@ -5,11 +5,12 @@ import pandas as pd
 import re
 import sys
 
-_REQUIRED_COLUMNS = set(["GENE_SYMBOL",
+_REQUIRED_COLUMNS = set(["#CHROM", "POS", "REF", "ALT", "GENE_SYMBOL",
                          "dbNSFP_rollup_damaging",
                          "SNPEFF_TOP_EFFECT_IMPACT"])
 _SAMPLENAME_REGEX = "JQ_CONS_SOM.*"
-_VARIANT_COUNT = "total variants"
+_VARIANT_COUNT = "total impacted variants"
+_SAMPLE_COUNT = "total impacted samples"
 
 class dbNSFP(object):
     #pylint: disable=invalid-name
@@ -26,7 +27,7 @@ class dbNSFP(object):
                                value_name="Sample_Data")
             #pylint: disable=line-too-long, unnecessary-lambda
             melted_df[self.damaging_column] = melted_df[self.damaging_column].apply(lambda x: str(x))
-            melted_df["Sample_Data"] = melted_df["Sample_Data"].apply(lambda x: str(x))
+            melted_df = melted_df.applymap(lambda x: str(x))
 
             melted_df = melted_df[melted_df["GENE_SYMBOL"] != "."]
 
@@ -36,19 +37,37 @@ class dbNSFP(object):
             raise BaseException("Cannot melt dataframe. {0}".format(excep))
 
     @staticmethod
-    def calculate_total_counts(initial_df):
+    def calculate_total_samples(initial_df):
         #pylint: disable=line-too-long, no-member
         initial_df["Sample_Data"] = initial_df["Sample_Data"].apply(lambda x: "1" if x == "0" else x)
         initial_df["Sample_Data"] = initial_df["Sample_Data"].apply(lambda x: 0 if x == "." else x)
 
         pivoted_df = pd.pivot_table(initial_df,
-                                          index=["GENE_SYMBOL"],
-                                          columns="Sample",
-                                          values="Sample_Data",
-                                          aggfunc=np.count_nonzero)
-        pivoted_df[_VARIANT_COUNT]= pivoted_df.sum(axis=1)
+                                    index=["GENE_SYMBOL"],
+                                    columns="Sample",
+                                    values="Sample_Data",
+                                    aggfunc=np.count_nonzero)
+        pivoted_df[_SAMPLE_COUNT]= pivoted_df.sum(axis=1)
 
-        return pivoted_df[_VARIANT_COUNT]
+        return pivoted_df[_SAMPLE_COUNT]
+
+    @staticmethod
+    def calculate_total_variants(initial_df):
+        #pylint: disable=no-member
+        pivoted_df = pd.pivot_table(initial_df,
+                                    index=["GENE_SYMBOL",
+                                           "#CHROM",
+                                           "POS",
+                                           "REF",
+                                           "ALT"],
+                                    columns="Sample",
+                                    values="Sample_Data",
+                                    aggfunc=np.count_nonzero)
+
+        total_df = pivoted_df.reset_index().groupby("GENE_SYMBOL").count()
+        total_df[_VARIANT_COUNT] = total_df["POS"]
+
+        return total_df[_VARIANT_COUNT]
 
     def pivot_df(self, initial_df):
         #pylint: disable=line-too-long, unnecessary-lambda
@@ -79,10 +98,12 @@ class dbNSFP(object):
     def change_col_order(self, new_column_names):
         ordered_names = []
         for col in new_column_names:
-            if col == _VARIANT_COUNT:
+            if col == _SAMPLE_COUNT:
                 ordered_names.insert(0, col)
-            elif col == self.damaging_rank_column:
+            elif col == _VARIANT_COUNT:
                 ordered_names.insert(1, col)
+            elif col == self.damaging_rank_column:
+                ordered_names.insert(2, col)
             else:
                 ordered_names.append(col)
 
@@ -108,7 +129,7 @@ class SnpEff(object):
                                value_name="Sample_Data")
             #pylint: disable=line-too-long, unnecessary-lambda
             melted_df[self.impact_column] = melted_df[self.impact_column].apply(lambda x: str(x))
-            melted_df["Sample_Data"] = melted_df["Sample_Data"].apply(lambda x: str(x))
+            melted_df = melted_df.applymap(lambda x: str(x))
 
             melted_df = melted_df[melted_df["GENE_SYMBOL"] != "."]
 
@@ -118,7 +139,11 @@ class SnpEff(object):
             raise BaseException("Cannot melt dataframe. {0}".format(excep))
 
     @staticmethod
-    def calculate_total_counts(dummy):
+    def calculate_total_samples(dummy):
+        return pd.Series()
+
+    @staticmethod
+    def calculate_total_variants(dummy):
         return pd.Series()
 
     def pivot_df(self, initial_df):
@@ -238,19 +263,6 @@ def _validate_df(initial_df):
     if not sample_column:
         raise BaseException(msg)
 
-def _calculate_total_variants(initial_df):
-    copied_df = initial_df.copy()
-    sample_cols =  copied_df.filter(regex=_SAMPLENAME_REGEX)
-    for col in copied_df.columns:
-        if col not in sample_cols:
-            del copied_df[col]
-
-    #pylint: disable=unnecessary-lambda
-    copied_df = copied_df.applymap(lambda x: str(x))
-    initial_df[_VARIANT_COUNT]= copied_df[copied_df != "."].count(axis=1)
-
-    return initial_df
-
 def _remove_unnecessary_columns(initial_df):
     sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
     required_columns = list(sample_cols.columns)
@@ -269,9 +281,9 @@ def _rearrange_columns(initial_df, obj):
     for column_name in list(initial_df.columns.values):
         if type(column_name) is tuple:
             if len(column_name[1]) > 0:
-                if column_name == ("dbNSFP_rollup_damaging", _VARIANT_COUNT):
+                if column_name == ("dbNSFP_rollup_damaging", _SAMPLE_COUNT):
                     totals.append(column_name[1])
-                elif column_name == ("SnpEff_Impact", _VARIANT_COUNT):
+                elif column_name == ("SnpEff_Impact", _SAMPLE_COUNT):
                     del initial_df[column_name]
                 else:
                     full_source_name, full_sample_name = column_name
@@ -317,16 +329,18 @@ def _add_arg_parse(args):
 def _rollup(input_file, output_file):
     initial_df = _create_df(input_file)
     condensed_df = _remove_unnecessary_columns(initial_df)
-#     total_count_df = _calculate_total_variants(condensed_df)
 
     annotations = [dbNSFP(), SnpEff()]
     annotation_dfs = []
 
     for annotation in annotations:
         melted_df = annotation.melt_df(condensed_df)
-        total_variants = annotation.calculate_total_counts(melted_df)
+        total_samples = annotation.calculate_total_samples(melted_df)
+        total_variants = annotation.calculate_total_variants(melted_df)
         pivoted_df = annotation.pivot_df(melted_df)
         ranked_df = annotation.calculate_rank(pivoted_df)
+        if not total_samples.empty:
+            ranked_df[_SAMPLE_COUNT] = total_samples
         if not total_variants.empty:
             ranked_df[_VARIANT_COUNT] = total_variants
         rearranged_df = _rearrange_columns(ranked_df, annotation)
