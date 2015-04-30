@@ -1,4 +1,4 @@
-gene symbol	total impacted samples	total impacted variants	dbNSFP|overall damaging rank	dbNSFP|damaging votes|P1|NORMAL	dbNSFP|damaging votes|P1|TUMOR	dbNSFP|damaging votes|P2|NORMAL	dbNSFP|damaging votes|P2|TUMOR	SnpEff|overall impact rank	SnpEff|impact|P1|NORMAL	SnpEff|impact|P1|TUMOR	SnpEff|impact|P2|NORMAL	SnpEff|impact|P2|TUMOR	SnpEff|impact category|HIGH	SnpEff|impact category|MODERATE	SnpEff|impact category|LOW	SnpEff|impact category|MODIFIER
-BRCA1	2	1	3	0	0	0	0	2	h	h	h	h	4	0	0	0
-CREBBP	8	2	1	14	14	14	14	1	hm	hm	hm	hm	4	4	0	0
-TP53	4	1	2	4	4	4	4	3	l	l	l	l	0	0	4	0
+gene symbol	distinct variants	total impacted samples	total mutations	dbNSFP|overall damaging rank	dbNSFP|damaging votes|P1|NORMAL	dbNSFP|damaging votes|P1|TUMOR	dbNSFP|damaging votes|P2|NORMAL	dbNSFP|damaging votes|P2|TUMOR	SnpEff|overall impact rank	SnpEff|overall impact score	SnpEff|impact category|HIGH	SnpEff|impact category|MODERATE	SnpEff|impact category|LOW	SnpEff|impact category|MODIFIER	SnpEff|impact|P1|NORMAL	SnpEff|impact|P1|TUMOR	SnpEff|impact|P2|NORMAL	SnpEff|impact|P2|TUMOR
+BRCA1	1	2	2	3	0	0	0	0	2	400000.0	4	0	0	0	h	h	h	h
+CREBBP	2	8	8	1	14	14	14	14	1	400004.0	4	4	0	0	hm	hm	hm	hm
+TP53	1	4	4	2	4	4	4	4	3	4e-05	0	0	4	0	l	l	l	l

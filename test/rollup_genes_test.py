@@ -101,6 +101,20 @@ class dbNSFPTestCase(unittest.TestCase):
 1|12|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_A|0
 1|23|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_B|.
 1|42|A|G|CREBBP|3|JQ_SUMMARY_SOM_COUNT_A|0
+1|42|A|G|CREBBP|2|JQ_SUMMARY_SOM_COUNT_B|.'''
+        input_df = dataframe(input_string)
+        dbNSFP = rollup_genes.dbNSFP()
+
+        total_variants = dbNSFP.calculate_total_mutations(input_df)
+
+        self.assertEquals([1, 1], list(total_variants))
+
+    def test_calculate_total_mutations(self):
+        input_string =\
+'''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
+1|12|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_A|0
+1|23|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_B|.
+1|42|A|G|CREBBP|3|JQ_SUMMARY_SOM_COUNT_A|0
 1|42|A|G|CREBBP|2|JQ_SUMMARY_SOM_COUNT_B|1'''
         input_df = dataframe(input_string)
         dbNSFP = rollup_genes.dbNSFP()
@@ -283,8 +297,8 @@ BRCA1\tLOW\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\t2'''
 
         rearranged_df = rollup_genes._rearrange_columns(ranked_df, SnpEff)
 
-        self.assertEquals("SnpEff|impact|P1|NORMAL", rearranged_df.columns[1])
-        self.assertEquals("SnpEff|impact|P1|TUMOR", rearranged_df.columns[2])
+        self.assertEquals("SnpEff|impact category|HIGH", rearranged_df.columns[2])
+        self.assertEquals("SnpEff|impact category|MODERATE", rearranged_df.columns[3])
 
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
