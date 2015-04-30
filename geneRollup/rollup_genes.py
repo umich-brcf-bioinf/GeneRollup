@@ -8,7 +8,7 @@ import sys
 _REQUIRED_COLUMNS = set(["#CHROM", "POS", "REF", "ALT", "GENE_SYMBOL",
                          "dbNSFP_rollup_damaging",
                          "SNPEFF_TOP_EFFECT_IMPACT"])
-_SAMPLENAME_REGEX = "JQ_CONS_SOM.*"
+_SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
 _VARIANT_COUNT = "total impacted variants"
 _SAMPLE_COUNT = "total impacted samples"
 
