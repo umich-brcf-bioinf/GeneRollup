@@ -1,0 +1,47 @@
+In the tab-delimited output file, each row represents all of the data for a
+single gene.
+
+---
+
+SnpEff impact values represent structural impacts and are listed as the total
+number of high (h), moderate (m), low (l), and modifier (x) classes for each
+gene. For example, a value of mmx indicates there were two variants whose
+highest impact was moderate and one variant whose highest impact was modifier.
+
+Each gene-sample cell is shaded based on its impact, where the most damaging
+impact class within the cell determines the shade. Darker shades correspond to
+higher impacts.
+
+For SnpEff, each gene is scored/ranked according to its overall impact across
+samples. Lower rank implies greater impact.
+
+---
+
+For each gene-sample, dbNSFP impact values represent functional impacts and are
+shown as the sum total of damaging indications for all 9 annotation sources.
+For example, if a gene had two variants where variant A had 3 damaging votes
+and variant B had 4 damaging votes, the value for that gene-sample would be
+(4+3=) 7.
+
+For dbNSFP, each gene is score/ranked according to its overall impact across
+samples. Lower rank implies greater impact
+
+---
+
+COLUMN NAME	DESCRIPTION
+gene symbol:	Gene symbol
+total impacted samples:	Total number of samples at each gene
+total impacted variants:	Total number of variants at each gene. A variant is
+	defined as the unique set of [chromosome, position, ref, alt]
+dbNSFP|overall damaging rank:	Determined by the sum of the damaging votes
+	across samples. Lower rank implies greater impact
+dbNSFP|damaging votes|<sample>:	Sum of all of the dbNSFP damaging votes for the
+	sample
+SnpEff|overall impact rank:	Derived from the SnpEff impact category, such that
+	HIGH is weighted most and MODERATE is weighted least. Lower rank implies
+	greater impact
+SnpEff|impact|<sample>:	Aggregation of SnpEff categories, where HIGH=h,
+	MODERATE=m, LOW=l, and MODIFIER=x
+SnpEff|impact category|<category>:	Sum of all of the SnpEff categories across
+	samples
+

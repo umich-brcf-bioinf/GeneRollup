@@ -172,9 +172,9 @@ BRCA1\t7\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\t2'''
 #TODO: determine how to alter dataframe() to account for pivoted df
     def test_rename_columns(self):
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data\ttotal variants
-BRCA1\t3\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\t2\t1
-BRCA1\t4\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\t3\t1'''
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSample\tSample_Data\ttotal variants\ttotal samples
+BRCA1\t3\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\t2\t1\t1
+BRCA1\t4\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\t3\t1\t1'''
         input_df = dataframe(input_string, sep="\t")
         dbNSFP = rollup_genes.dbNSFP()
         pivoted_df = dbNSFP.pivot_df(input_df)

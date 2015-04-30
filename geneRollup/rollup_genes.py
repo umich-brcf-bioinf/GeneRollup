@@ -15,6 +15,7 @@ _SAMPLE_COUNT = "total impacted samples"
 class dbNSFP(object):
     #pylint: disable=invalid-name
     def __init__(self):
+        self.name = "dbNSFP"
         self.damaging_column = "dbNSFP_rollup_damaging"
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
         self.column_label = "damaging votes"
@@ -97,15 +98,22 @@ class dbNSFP(object):
 
     def change_col_order(self, new_column_names):
         ordered_names = []
+        samples = ""
+        variants = ""
         for col in new_column_names:
             if col == _SAMPLE_COUNT:
-                ordered_names.insert(0, col)
+                samples = col
             elif col == _VARIANT_COUNT:
-                ordered_names.insert(1, col)
+                variants = col
             elif col == self.damaging_rank_column:
-                ordered_names.insert(2, col)
+                ordered_names.insert(0, col)
             else:
                 ordered_names.append(col)
+
+        if samples:
+            ordered_names.insert(0, samples)
+        if variants:
+            ordered_names.insert(1, variants)
 
         return ordered_names
 
@@ -113,10 +121,10 @@ class dbNSFP(object):
 class SnpEff(object):
     #pylint: disable=invalid-name
     def __init__(self):
+        self.name = "SnpEff"
         self.impact_column = "SNPEFF_TOP_EFFECT_IMPACT"
         self.impact_rank_column = "SnpEff|overall impact rank"
         self.tmp_impact_column = "SnpEff_Impact"
-        self.score_column = "SnpEff_impact_score"
         self.possible_values = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
         self.column_label = "impact"
         self.impact_category = "SnpEff|impact category|{}"
@@ -174,11 +182,11 @@ class SnpEff(object):
 
         expanded_df = scored_df.unstack()
 
-        expanded_df[self.impact_rank_column] = expanded_df[self.score_column].sum(axis=1)
+        expanded_df[self.impact_rank_column] = expanded_df["tmp score"].sum(axis=1)
         expanded_df = self._calculate_impact_score(expanded_df)
         expanded_df = self._calculate_impact_rank(expanded_df)
 
-        del expanded_df[self.score_column]
+        del expanded_df["tmp score"]
         for item in self.possible_values:
             del expanded_df[item + "_initial_sum"]
 
@@ -199,13 +207,14 @@ class SnpEff(object):
 
         return initial_df
 
-    def _calculate_score(self, initial_df):
+    @staticmethod
+    def _calculate_score(initial_df):
         high = initial_df["HIGH"] * 100000.0
         moderate = initial_df["MODERATE"]
         low = initial_df["LOW"]/100000.0
         modifier = initial_df["MODIFIER"]/10**12
 
-        initial_df[self.score_column] = high + moderate + low + modifier
+        initial_df["tmp score"] = high + moderate + low + modifier
 
         del initial_df["HIGH"]
         del initial_df["MODERATE"]
@@ -219,7 +228,7 @@ class SnpEff(object):
             #pylint: disable=line-too-long
             initial_df[self.impact_category.format(item)] = initial_df[item + "_initial_sum"].sum(axis=1)
 
-        initial_df[self.score_column] = initial_df[self.impact_rank_column]
+        initial_df["tmp score"] = initial_df[self.impact_rank_column]
 
         return initial_df
 
@@ -306,6 +315,7 @@ def _rearrange_columns(initial_df, obj):
     ordered_names = obj.change_col_order(all_column_names)
 
     initial_df = initial_df[ordered_names]
+    initial_df.index.names=["gene symbol"]
 
     return initial_df
 
@@ -327,6 +337,8 @@ def _add_arg_parse(args):
     return parser.parse_args(args)
 
 def _rollup(input_file, output_file):
+    print "Starting Gene Rollup"
+
     initial_df = _create_df(input_file)
     condensed_df = _remove_unnecessary_columns(initial_df)
 
@@ -334,6 +346,7 @@ def _rollup(input_file, output_file):
     annotation_dfs = []
 
     for annotation in annotations:
+        print "Generating {} rollup information".format(annotation.name)
         melted_df = annotation.melt_df(condensed_df)
         total_samples = annotation.calculate_total_samples(melted_df)
         total_variants = annotation.calculate_total_variants(melted_df)
@@ -349,6 +362,8 @@ def _rollup(input_file, output_file):
 
     combined_df = _combine_dfs(annotation_dfs)
     combined_df.to_csv(output_file, sep="\t", index=True)
+
+    print "Done."
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
