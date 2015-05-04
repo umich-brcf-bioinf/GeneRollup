@@ -49,9 +49,9 @@ class GeneRollupTestCase(unittest.TestCase):
 1|2|3|4|5|6'''
         input_df = dataframe(input_string)
 
-        actual_df = rollup_genes._remove_unnecessary_columns(input_df)
-        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT_A", "JQ_SUMMARY_SOM_COUNT_B"],
-                          list(actual_df.columns.values))
+#         actual_df = rollup_genes._remove_unnecessary_columns(input_df)
+#         self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT_A", "JQ_SUMMARY_SOM_COUNT_B"],
+#                           list(actual_df.columns.values))
 
 
 class dbNSFPTestCase(unittest.TestCase):
