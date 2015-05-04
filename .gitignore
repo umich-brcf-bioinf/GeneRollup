@@ -3,7 +3,7 @@
 
 # Compiled python modules.
 **/__pycache__
-*.pyc
+**/*.pyc
 
 # build dirs/files
 # Setuptools distribution folder.

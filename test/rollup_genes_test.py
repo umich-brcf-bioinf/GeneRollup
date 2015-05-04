@@ -1,5 +1,5 @@
 #pylint: disable=line-too-long, too-many-public-methods, invalid-name
-#pylint: disable=maybe-no-member
+#pylint: disable=maybe-no-member, too-few-public-methods
 from __future__ import absolute_import
 
 from StringIO import StringIO
