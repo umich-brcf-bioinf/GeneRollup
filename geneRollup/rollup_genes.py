@@ -1,17 +1,21 @@
 #!/usr/bin/env python
 import argparse
-import numpy as np
-import pandas as pd
+from collections import OrderedDict
 import re
 import sys
 
-_REQUIRED_COLUMNS = set(["#CHROM", "POS", "REF", "ALT", "GENE_SYMBOL",
+import numpy as np
+import pandas as pd
+
+
+_REQUIRED_COLUMNS = set(["GENE_SYMBOL", #chrom pos ref alt
                          "dbNSFP_rollup_damaging",
                          "SNPEFF_TOP_EFFECT_IMPACT"])
 _SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
-_VARIANT_COUNT = "distinct variants"
+_LOCI_COUNT = "distinct loci"
 _SAMPLE_COUNT = "total impacted samples"
 _MUTATION_COUNT = "total mutations"
+_GENE_SYMBOL = "gene symbol"
 
 class dbNSFP(object):
     #pylint: disable=invalid-name
@@ -21,69 +25,30 @@ class dbNSFP(object):
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
         self.column_label = "damaging votes"
 
+    def summarize(self, initial_df):
+        melted_df = self.melt_df(initial_df)
+        pivoted_df = self.pivot_df(melted_df)
+        ranked_df = self.calculate_rank(pivoted_df)
+        return ranked_df
+
     def melt_df(self, initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         try:
             melted_df = pd.melt(initial_df,
                                id_vars=list(_REQUIRED_COLUMNS),
+                               value_vars=list(sample_cols),
                                var_name="Sample",
                                value_name="Sample_Data")
+
             #pylint: disable=line-too-long, unnecessary-lambda
             melted_df[self.damaging_column] = melted_df[self.damaging_column].apply(lambda x: str(x))
             melted_df = melted_df.applymap(lambda x: str(x))
-
             melted_df = melted_df[melted_df["GENE_SYMBOL"] != "."]
 
             return melted_df
 
         except Exception as excep :
             raise BaseException("Cannot melt dataframe. {0}".format(excep))
-
-    @staticmethod
-    def calculate_total_samples(initial_df):
-        #pylint: disable=line-too-long, no-member
-        initial_df["Sample_Data"] = initial_df["Sample_Data"].apply(lambda x: "1" if x == "0" else x)
-        initial_df["Sample_Data"] = initial_df["Sample_Data"].apply(lambda x: 0 if x == "." else x)
-
-        pivoted_df = pd.pivot_table(initial_df,
-                                    index=["GENE_SYMBOL"],
-                                    columns="Sample",
-                                    values="Sample_Data",
-                                    aggfunc=np.count_nonzero)
-        pivoted_df[_SAMPLE_COUNT] = pivoted_df.sum(axis=1)
-
-        return pivoted_df[_SAMPLE_COUNT]
-
-    @staticmethod
-    def calculate_total_variants(initial_df):
-        #pylint: disable=no-member
-        pivoted_df = pd.pivot_table(initial_df,
-                                    index=["GENE_SYMBOL",
-                                           "#CHROM",
-                                           "POS",
-                                           "REF",
-                                           "ALT"],
-                                    columns="Sample",
-                                    values="Sample_Data",
-                                    aggfunc=np.count_nonzero)
-
-        total_df = pivoted_df.reset_index().groupby("GENE_SYMBOL").count()
-        total_df[_VARIANT_COUNT] = total_df["POS"]
-
-        return total_df[_VARIANT_COUNT]
-
-    @staticmethod
-    def calculate_total_mutations(initial_df):
-        #pylint: disable=line-too-long, no-member
-
-        initial_df["Sample_Data"] = initial_df["Sample_Data"].apply(lambda x: x if x != "." else None)
-        pivoted_df = pd.pivot_table(initial_df,
-                                    index=["GENE_SYMBOL"],
-                                    columns="Sample",
-                                    values="Sample_Data",
-                                    aggfunc=np.count_nonzero)
-        pivoted_df[_MUTATION_COUNT] = pivoted_df.sum(axis=1)
-
-        return pivoted_df[_MUTATION_COUNT]
 
     def pivot_df(self, initial_df):
         #pylint: disable=line-too-long, unnecessary-lambda
@@ -111,13 +76,47 @@ class dbNSFP(object):
 
         return initial_df
 
-    def change_col_order(self, new_column_names):
+    def rearrange_columns(self, initial_df):
+        new_column_names = []
+        totals = []
+
+        for column_name in list(initial_df.columns.values):
+            if type(column_name) is tuple:
+                if len(column_name[1]) > 0:
+                    if column_name == (self.damaging_column, _SAMPLE_COUNT):
+                        totals.append(column_name[1])
+                    else:
+                        full_source_name, full_sample_name = column_name
+                        source = full_source_name.split("_")[0]
+
+                        patient_prefix = full_sample_name.split("|")[1]
+                        patient_suffix = full_sample_name.split("|")[2]
+
+                        new_column_name = "|".join([source,
+                                                    self.column_label,
+                                                    patient_prefix,
+                                                    patient_suffix])
+                        new_column_names.append(new_column_name)
+                else:
+                    new_column_names.append(column_name[0])
+
+        all_column_names = totals + new_column_names
+
+        initial_df.columns = all_column_names
+        ordered_names = self._change_col_order(all_column_names)
+
+        initial_df = initial_df[ordered_names]
+        initial_df.index.names=[_GENE_SYMBOL]
+
+        return initial_df
+
+    def _change_col_order(self, new_column_names):
         ordered_names = []
         samples = ""
         variants = ""
         mutations = ""
         for col in new_column_names:
-            if col == _VARIANT_COUNT:
+            if col == _LOCI_COUNT:
                 variants = col
             elif col == _SAMPLE_COUNT:
                 samples = col
@@ -138,6 +137,7 @@ class dbNSFP(object):
 
 
 class SnpEff(object):
+    _POSSIBLE_VALUES = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
     #pylint: disable=invalid-name
     def __init__(self):
         self.name = "SnpEff"
@@ -147,12 +147,19 @@ class SnpEff(object):
         self.impact_score_column = "SnpEff|overall impact score"
         self.column_label = "impact"
         self.impact_category = "SnpEff|impact category|{}"
-        self.possible_values = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
+
+    def summarize(self, initial_df):
+        melted_df = self.melt_df(initial_df)
+        pivoted_df = self.pivot_df(melted_df)
+        ranked_df = self.calculate_rank(pivoted_df)
+        return ranked_df
 
     def melt_df(self, initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         try:
             melted_df = pd.melt(initial_df,
                                id_vars=list(_REQUIRED_COLUMNS),
+                               value_vars=list(sample_cols),
                                var_name="Sample",
                                value_name="Sample_Data")
             #pylint: disable=line-too-long, unnecessary-lambda
@@ -165,18 +172,6 @@ class SnpEff(object):
 
         except Exception as excep :
             raise BaseException("Cannot melt dataframe. {0}".format(excep))
-
-    @staticmethod
-    def calculate_total_samples(dummy):
-        return pd.Series()
-
-    @staticmethod
-    def calculate_total_variants(dummy):
-        return pd.Series()
-
-    @staticmethod
-    def calculate_total_mutations(dummy):
-        return pd.Series()
 
     def pivot_df(self, initial_df):
         #pylint: disable=line-too-long, unnecessary-lambda
@@ -196,7 +191,7 @@ class SnpEff(object):
 
     def calculate_rank(self, initial_df):
         #pylint: disable=line-too-long
-        for item in self.possible_values:
+        for item in SnpEff._POSSIBLE_VALUES:
             if item not in initial_df.columns:
                 initial_df[item] = 0
             initial_df[item + "_initial_sum"] = initial_df[item].map(int)
@@ -211,7 +206,7 @@ class SnpEff(object):
         expanded_df = self._calculate_impact_rank(expanded_df)
 
         del expanded_df[self.impact_score]
-        for item in self.possible_values:
+        for item in SnpEff._POSSIBLE_VALUES:
             del expanded_df[item + "_initial_sum"]
 
         try:
@@ -248,7 +243,7 @@ class SnpEff(object):
 
     def _calculate_impact_score(self, initial_df):
         #pylint: disable=line-too-long
-        for item in self.possible_values:
+        for item in SnpEff._POSSIBLE_VALUES:
             initial_df[self.impact_category.format(item)] = initial_df[item + "_initial_sum"].sum(axis=1)
 
         return initial_df
@@ -260,7 +255,41 @@ class SnpEff(object):
 
         return initial_df
 
-    def change_col_order(self, new_column_names):
+    def rearrange_columns(self, initial_df):
+        new_column_names = []
+        totals = []
+
+        for column_name in list(initial_df.columns.values):
+            if type(column_name) is tuple:
+                if len(column_name[1]) > 0:
+                    if column_name == (self.name , _SAMPLE_COUNT):
+                        del initial_df[column_name]
+                    else:
+                        full_source_name, full_sample_name = column_name
+                        source = full_source_name.split("_")[0]
+
+                        patient_prefix = full_sample_name.split("|")[1]
+                        patient_suffix = full_sample_name.split("|")[2]
+
+                        new_column_name = "|".join([source,
+                                                    self.column_label,
+                                                    patient_prefix,
+                                                    patient_suffix])
+                        new_column_names.append(new_column_name)
+                else:
+                    new_column_names.append(column_name[0])
+
+        all_column_names = totals + new_column_names
+
+        initial_df.columns = all_column_names
+        ordered_names = self._change_col_order(all_column_names)
+
+        initial_df = initial_df[ordered_names]
+        initial_df.index.names=[_GENE_SYMBOL]
+
+        return initial_df
+
+    def _change_col_order(self, new_column_names):
         rank = []
         score = []
         category = []
@@ -271,7 +300,7 @@ class SnpEff(object):
             elif col == self.impact_score_column:
                 score.append(col)
             else:
-                regex = "^{}\|{}\|.*".format(self.name, self.column_label)
+                regex = r"^{}\|{}\|.*".format(self.name, self.column_label)
                 if re.match(regex, col):
                     impact.append(col)
                 else:
@@ -281,6 +310,43 @@ class SnpEff(object):
 
         return ordered_names
 
+
+class SummaryColumns(object):
+    def __init__(self):
+        self.name = "Summary Columns"
+        self.groupby_column = "GENE_SYMBOL"
+
+    def summarize(self, initial_df):
+        sample_df =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_df[self.groupby_column] = initial_df[self.groupby_column]
+
+        summary_df = pd.DataFrame()
+        summary_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
+        summary_df[_LOCI_COUNT] = self.calculate_total_loci(sample_df)
+        summary_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
+
+        return summary_df
+
+    def calculate_total_samples(self, sample_df):
+        sample_df = sample_df.applymap(str)
+        sample_df[sample_df == '.'] = None
+        sample_df = sample_df.groupby(self.groupby_column).count()
+        sample_df[sample_df > 0] = 1
+
+        return sample_df.apply(sum, 1)
+
+    def calculate_total_loci(self, sample_df):
+        return sample_df.groupby(self.groupby_column).count().ix[:,0]
+
+    def calculate_total_mutations(self, sample_df):
+        sample_df = sample_df.applymap(str)
+        sample_df[sample_df == '.'] = None
+        return sample_df.groupby(self.groupby_column).count().apply(sum, 1)
+
+    @staticmethod
+    def rearrange_columns(initial_df):
+        initial_df.index.names=[_GENE_SYMBOL]
+        return initial_df
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -315,45 +381,10 @@ def _remove_unnecessary_columns(initial_df):
 
     return initial_df
 
-def _rearrange_columns(initial_df, obj):
-    new_column_names = []
-    totals = []
-
-    for column_name in list(initial_df.columns.values):
-        if type(column_name) is tuple:
-            if len(column_name[1]) > 0:
-                if column_name == ("dbNSFP_rollup_damaging", _SAMPLE_COUNT):
-                    totals.append(column_name[1])
-                elif column_name == ("SnpEff", _SAMPLE_COUNT):
-                    del initial_df[column_name]
-                else:
-                    full_source_name, full_sample_name = column_name
-                    source = full_source_name.split("_")[0]
-
-                    patient_prefix = full_sample_name.split("|")[1]
-                    patient_suffix = full_sample_name.split("|")[2]
-
-                    new_column_name = "|".join([source,
-                                                obj.column_label,
-                                                patient_prefix,
-                                                patient_suffix])
-                    new_column_names.append(new_column_name)
-            else:
-                new_column_names.append(column_name[0])
-
-    all_column_names = totals + new_column_names
-
-    initial_df.columns = all_column_names
-    ordered_names = obj.change_col_order(all_column_names)
-
-    initial_df = initial_df[ordered_names]
-    initial_df.index.names=["gene symbol"]
-
-    return initial_df
-
 def _combine_dfs(dfs):
-    dbnsfp_df, snpeff_df = dfs
-    combined_df = dbnsfp_df.join(snpeff_df, how='outer')
+    summary_df, dbnsfp_df, snpeff_df = dfs.values()
+    combined_df = summary_df.join(dbnsfp_df, how='outer')
+    combined_df = combined_df.join(snpeff_df, how='outer')
     combined_df = combined_df.fillna(0)
 
     combined_df = combined_df.fillna("")
@@ -374,34 +405,20 @@ def _rollup(input_file, output_file):
     initial_df = _create_df(input_file)
     condensed_df = _remove_unnecessary_columns(initial_df)
 
-    annotations = [dbNSFP(), SnpEff()]
-    annotation_dfs = []
+    annotations = [SummaryColumns(), dbNSFP(), SnpEff()]
+    annotation_dfs = OrderedDict()
 
     for annotation in annotations:
         print "Generating {} rollup information".format(annotation.name)
-
-        melted_df = annotation.melt_df(condensed_df)
-        total_samples = annotation.calculate_total_samples(melted_df)
-        total_variants = annotation.calculate_total_variants(melted_df)
-        total_mutations = annotation.calculate_total_mutations(melted_df)
-
-        pivoted_df = annotation.pivot_df(melted_df)
-        ranked_df = annotation.calculate_rank(pivoted_df)
-
-        if not total_samples.empty:
-            ranked_df[_SAMPLE_COUNT] = total_samples
-        if not total_variants.empty:
-            ranked_df[_VARIANT_COUNT] = total_variants
-        if not total_mutations.empty:
-            ranked_df[_MUTATION_COUNT] = total_mutations
-
-        rearranged_df = _rearrange_columns(ranked_df, annotation)
-        annotation_dfs.append(rearranged_df)
+        summarized_df = annotation.summarize(condensed_df)
+        rearranged_df = annotation.rearrange_columns(summarized_df)
+        annotation_dfs[annotation.name] = rearranged_df
 
     combined_df = _combine_dfs(annotation_dfs)
     combined_df.to_csv(output_file, sep="\t", index=True)
 
     print "Done."
+
 
 def main():
     args = _add_arg_parse(sys.argv[1:])

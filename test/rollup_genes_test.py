@@ -18,10 +18,10 @@ def dataframe(input_data, sep="|"):
 class GeneRollupTestCase(unittest.TestCase):
     def test_create_df(self):
         input_string =\
-'''#CHROM\tPOS\tREF\tALT\tGENE_SYMBOL\tdbNSFP_rollup_damaging\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
 1\t2\t3\t4\t5\t6\t7\t8'''
         actual_df = rollup_genes._create_df(StringIO(input_string))
-        self.assertEquals(["#CHROM", "POS", "REF", "ALT", "GENE_SYMBOL", "dbNSFP_rollup_damaging", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
+        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
                             list(actual_df.columns.values))
 
     def test_create_df_invalid(self):
@@ -35,9 +35,9 @@ class GeneRollupTestCase(unittest.TestCase):
 
     def test_create_df_missingSamples(self):
         input_string =\
-'''#CHROM\tPOS\tREF\tALT\tGENE_SYMBOL\tdbNSFP_rollup_damaging\tfoo
-1\t2\t3\t4\t5\t6\t7
-1\t2\t3\t4\t5\t6\t7'''
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tfoo
+1\t2\t3
+1\t2\t3'''
         self.assertRaisesRegexp(BaseException,
                                     "Input file is missing required headers",
                                     rollup_genes._create_df,
@@ -45,12 +45,12 @@ class GeneRollupTestCase(unittest.TestCase):
 
     def test_remove_unnecessary_columns(self):
         input_string =\
-'''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|JQ_SUMMARY_SOM_COUNT_A|JQ_SUMMARY_SOM_COUNT_B|FOO|BAR
+'''GENE_SYMBOL|dbNSFP_rollup_damaging|JQ_SUMMARY_SOM_COUNT_A|JQ_SUMMARY_SOM_COUNT_B|FOO|BAR
 1|2|3|4|5|6'''
         input_df = dataframe(input_string)
 
         actual_df = rollup_genes._remove_unnecessary_columns(input_df)
-        self.assertEquals(["#CHROM", "POS", "REF", "ALT", "GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT_A", "JQ_SUMMARY_SOM_COUNT_B"],
+        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT_A", "JQ_SUMMARY_SOM_COUNT_B"],
                           list(actual_df.columns.values))
 
 
@@ -59,15 +59,15 @@ class dbNSFPTestCase(unittest.TestCase):
         input_string =\
 '''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|SNPEFF_TOP_EFFECT_IMPACT|JQ_SUMMARY_SOM_COUNT_A|JQ_SUMMARY_SOM_COUNT_B
 1|2|3|4|BRCA1|4|.|2|3
-1|2|3|4|BRCA1|5|.|3|4'''
+5|6|7|8|BRCA1|5|.|3|4'''
         input_df = dataframe(input_string)
         dbNSFP = rollup_genes.dbNSFP()
         actual_df = dbNSFP.melt_df(input_df)
 
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "4", "JQ_SUMMARY_SOM_COUNT_A", "2"], list(actual_df.values[0]))
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "5", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[1]))
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "4", "JQ_SUMMARY_SOM_COUNT_B", "3"], list(actual_df.values[2]))
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "5", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[3]))
+        self.assertEquals(["BRCA1", ".", "4", "JQ_SUMMARY_SOM_COUNT_A", "2"], list(actual_df.values[0]))
+        self.assertEquals(["BRCA1", ".","5", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[1]))
+        self.assertEquals(["BRCA1", ".", "4", "JQ_SUMMARY_SOM_COUNT_B", "3"], list(actual_df.values[2]))
+        self.assertEquals(["BRCA1", ".", "5", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[3]))
 
     def test_melt_df_excludeNullGeneSymbols(self):
         input_string =\
@@ -78,50 +78,8 @@ class dbNSFPTestCase(unittest.TestCase):
         dbNSFP = rollup_genes.dbNSFP()
         actual_df = dbNSFP.melt_df(input_df)
         print actual_df
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "5", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[0]))
-        self.assertEquals([".", "2", "BRCA1", "1", "4", "3", "5", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[1]))
-
-    def calculate_total_samples(self):
-        input_string =\
-'''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
-1|12|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|23|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_B|.
-1|42|A|G|CREBBP|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|42|A|G|CREBBP|2|JQ_SUMMARY_SOM_COUNT_B|1'''
-        input_df = dataframe(input_string)
-        dbNSFP = rollup_genes.dbNSFP()
-
-        total_variants = dbNSFP.calculate_total_samples(input_df)
-
-        self.assertEquals([1, 2], list(total_variants))
-
-    def test_calculate_total_variants(self):
-        input_string =\
-'''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
-1|12|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|23|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_B|.
-1|42|A|G|CREBBP|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|42|A|G|CREBBP|2|JQ_SUMMARY_SOM_COUNT_B|.'''
-        input_df = dataframe(input_string)
-        dbNSFP = rollup_genes.dbNSFP()
-
-        total_variants = dbNSFP.calculate_total_mutations(input_df)
-
-        self.assertEquals([1, 1], list(total_variants))
-
-    def test_calculate_total_mutations(self):
-        input_string =\
-'''#CHROM|POS|REF|ALT|GENE_SYMBOL|dbNSFP_rollup_damaging|Sample|Sample_Data
-1|12|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|23|A|G|BRCA1|3|JQ_SUMMARY_SOM_COUNT_B|.
-1|42|A|G|CREBBP|3|JQ_SUMMARY_SOM_COUNT_A|0
-1|42|A|G|CREBBP|2|JQ_SUMMARY_SOM_COUNT_B|1'''
-        input_df = dataframe(input_string)
-        dbNSFP = rollup_genes.dbNSFP()
-
-        total_variants = dbNSFP.calculate_total_variants(input_df)
-
-        self.assertEquals([2, 1], list(total_variants))
+        self.assertEquals(["BRCA1", ".", "5", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[0]))
+        self.assertEquals(["BRCA1", ".", "5", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[1]))
 
     def test_pivot_df(self):
         input_string =\
@@ -193,7 +151,7 @@ BRCA1\t4\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\t3\t1\t1'''
         dbNSFP = rollup_genes.dbNSFP()
         pivoted_df = dbNSFP.pivot_df(input_df)
 
-        rearranged_df = rollup_genes._rearrange_columns(pivoted_df, dbNSFP)
+        rearranged_df = dbNSFP.rearrange_columns(pivoted_df)
         self.assertEquals("dbNSFP|damaging votes|P1|NORMAL", rearranged_df.columns[0])
         self.assertEquals("dbNSFP|damaging votes|P1|TUMOR", rearranged_df.columns[1])
 
@@ -208,10 +166,10 @@ class SnpEffTestCase(unittest.TestCase):
         SnpEff = rollup_genes.SnpEff()
         actual_df = SnpEff.melt_df(input_df)
 
-        self.assertEquals(["HIGH", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_A", "2"], list(actual_df.values[0]))
-        self.assertEquals(["LOW", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[1]))
-        self.assertEquals(["HIGH", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_B", "3"], list(actual_df.values[2]))
-        self.assertEquals(["LOW", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[3]))
+        self.assertEquals(["BRCA1", "HIGH", ".", "JQ_SUMMARY_SOM_COUNT_A", "2"], list(actual_df.values[0]))
+        self.assertEquals(["BRCA1", "LOW", ".", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[1]))
+        self.assertEquals(["BRCA1", "HIGH", ".", "JQ_SUMMARY_SOM_COUNT_B", "3"], list(actual_df.values[2]))
+        self.assertEquals(["BRCA1", "LOW", ".", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[3]))
 
     def test_melt_df_excludeNullGeneSymbols(self):
         input_string =\
@@ -222,8 +180,8 @@ class SnpEffTestCase(unittest.TestCase):
         SnpEff = rollup_genes.SnpEff()
         actual_df = SnpEff.melt_df(input_df)
 
-        self.assertEquals(["HIGH", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[0]))
-        self.assertEquals(["HIGH", "2", "BRCA1", "1", "4", "3", ".", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[1]))
+        self.assertEquals(["BRCA1", "HIGH", ".", "JQ_SUMMARY_SOM_COUNT_A", "3"], list(actual_df.values[0]))
+        self.assertEquals(["BRCA1", "HIGH", ".", "JQ_SUMMARY_SOM_COUNT_B", "4"], list(actual_df.values[1]))
 
     def test_pivot_df(self):
         input_string =\
@@ -295,10 +253,49 @@ BRCA1\tLOW\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\t2'''
         pivoted_df = SnpEff.pivot_df(melted_df)
         ranked_df = SnpEff.calculate_rank(pivoted_df)
 
-        rearranged_df = rollup_genes._rearrange_columns(ranked_df, SnpEff)
+        rearranged_df = SnpEff.rearrange_columns(ranked_df)
 
         self.assertEquals("SnpEff|impact category|HIGH", rearranged_df.columns[2])
         self.assertEquals("SnpEff|impact category|MODERATE", rearranged_df.columns[3])
+
+
+class SummaryColumnsTestCase(unittest.TestCase):
+    def test_calculate_total_samples(self):
+        input_string =\
+'''GENE_SYMBOL|SampleA|SampleB
+BRCA1|1|1
+BRCA1|.|1
+CREBBP|0|.'''
+        input_df = dataframe(input_string)
+        summary_cols = rollup_genes.SummaryColumns()
+        total_variants = summary_cols.calculate_total_samples(input_df)
+
+        self.assertEquals([2, 1], list(total_variants))
+
+    def test_calculate_total_mutations(self):
+        input_string =\
+'''GENE_SYMBOL|SampleA|SampleB
+BRCA1|1|1
+BRCA1|.|1
+CREBBP|0|.'''
+        input_df = dataframe(input_string)
+        summary_cols = rollup_genes.SummaryColumns()
+        total_variants =summary_cols.calculate_total_mutations(input_df)
+
+        self.assertEquals(["BRCA1", "CREBBP"], list(total_variants.index.values))
+        self.assertEquals([3, 1], list(total_variants))
+
+    def test_calculate_total_loci(self):
+        input_string =\
+'''GENE_SYMBOL|SampleA|SampleB
+BRCA1|1|1
+BRCA1|.|1
+CREBBP|0|.'''
+        input_df = dataframe(input_string)
+        summary_cols = rollup_genes.SummaryColumns()
+        total_loci = summary_cols.calculate_total_loci(input_df)
+        self.assertEquals(["BRCA1", "CREBBP"], list(total_loci.index.values))
+        self.assertEquals([2, 1], list(total_loci))
 
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
