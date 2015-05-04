@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-_REQUIRED_COLUMNS = set(["GENE_SYMBOL", #chrom pos ref alt
+_REQUIRED_COLUMNS = set(["GENE_SYMBOL",
                          "dbNSFP_rollup_damaging",
                          "SNPEFF_TOP_EFFECT_IMPACT"])
 _SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
@@ -18,6 +18,8 @@ _MUTATION_COUNT = "total mutations"
 _GENE_SYMBOL = "gene symbol"
 
 class dbNSFP(object):
+    _REQUIRED_COLUMNS = set(["GENE_SYMBOL", "dbNSFP_rollup_damaging"])
+
     #pylint: disable=invalid-name
     def __init__(self):
         self.name = "dbNSFP"
@@ -26,10 +28,24 @@ class dbNSFP(object):
         self.column_label = "damaging votes"
 
     def summarize(self, initial_df):
-        melted_df = self.melt_df(initial_df)
-        pivoted_df = self.pivot_df(melted_df)
-        ranked_df = self.calculate_rank(pivoted_df)
+#         melted_df = self.melt_df(initial_df)
+#         pivoted_df = self.pivot_df(melted_df)
+        condensed_df = self._remove_unnecessary_columns(initial_df)
+        ranked_df = self.calculate_rank(condensed_df)
         return ranked_df
+
+    @staticmethod
+    def _remove_unnecessary_columns(initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        required_columns = list(sample_cols.columns)
+        required_columns.extend(dbNSFP._REQUIRED_COLUMNS)
+
+        condensed_df = pd.DataFrame()
+        for col in initial_df.columns:
+            if col in required_columns:
+                condensed_df[col] = initial_df[col]
+
+        return condensed_df
 
     def melt_df(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
@@ -51,11 +67,12 @@ class dbNSFP(object):
             raise BaseException("Cannot melt dataframe. {0}".format(excep))
 
     def pivot_df(self, initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         #pylint: disable=line-too-long, unnecessary-lambda
         initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(lambda x: int(x))
         pivoted_df = pd.pivot_table(initial_df,
                               index=["GENE_SYMBOL"],
-                              columns=["Sample"],
+                              columns="Sample",
                               values=[self.damaging_column],
                               aggfunc=sum)
         pivoted_df = pivoted_df.applymap(lambda x: None if x == 0 else str(x))
@@ -64,17 +81,27 @@ class dbNSFP(object):
         return pivoted_df
 
     def calculate_rank(self, initial_df):
-        #pylint: disable=line-too-long, unnecessary-lambda
-        initial_df[self.damaging_rank_column] = initial_df[self.damaging_column].sum(axis=1)
-        initial_df = initial_df.sort(self.damaging_rank_column, ascending=0)
-        initial_df[self.damaging_rank_column] = initial_df[self.damaging_rank_column].rank(ascending=0, method="min")
+        #pylint: disable=line-too-long
+        initial_df = initial_df.applymap(str)
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        initial_df[initial_df == "."] = None
 
-        try:
-            initial_df[self.damaging_rank_column] = initial_df[self.damaging_rank_column].apply(lambda x: str(int(x)))
-        except ValueError:
-            pass
+        for sample in sample_cols:
+            dummy, samp_number, suffix = sample.split("|")
+            #set sample columns equal to damaging column value
+            initial_df[sample][initial_df[sample] != None] = initial_df[self.damaging_column]
+            initial_df[sample].fillna(0, inplace=True)
 
-        return initial_df
+            initial_df["|".join([self.name, self.column_label, samp_number, suffix])] = initial_df[sample].apply(int)
+            del initial_df[sample]
+
+        ranked_df = initial_df.groupby("GENE_SYMBOL").sum()
+        ranked_df = ranked_df.applymap(int)
+        ranked_df[self.damaging_rank_column] = ranked_df.apply(sum, 1)
+        ranked_df = ranked_df.sort(self.damaging_rank_column, ascending=0)
+        ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].rank(ascending=0, method="min")
+
+        return ranked_df
 
     def rearrange_columns(self, initial_df):
         new_column_names = []
@@ -138,6 +165,13 @@ class dbNSFP(object):
 
 class SnpEff(object):
     _POSSIBLE_VALUES = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
+    _RANK_SCORES =  {"HIGH": 100000.0,
+                     "MODERATE": 1,
+                     "LOW": 1/100000.0,
+                     "MODIFIER": 10**12}
+    _RANK_ABBREVS =  {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
+    _REQUIRED_COLUMNS = set(["GENE_SYMBOL", "SNPEFF_TOP_EFFECT_IMPACT"])
+
     #pylint: disable=invalid-name
     def __init__(self):
         self.name = "SnpEff"
@@ -149,10 +183,24 @@ class SnpEff(object):
         self.impact_category = "SnpEff|impact category|{}"
 
     def summarize(self, initial_df):
-        melted_df = self.melt_df(initial_df)
-        pivoted_df = self.pivot_df(melted_df)
-        ranked_df = self.calculate_rank(pivoted_df)
+#         melted_df = self.melt_df(initial_df)
+#         pivoted_df = self.pivot_df(melted_df)
+        condensed_df = self._remove_unnecessary_columns(initial_df)
+        ranked_df = self.calculate_rank(condensed_df)
         return ranked_df
+
+    @staticmethod
+    def _remove_unnecessary_columns(initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        required_columns = list(sample_cols.columns)
+        required_columns.extend(SnpEff._REQUIRED_COLUMNS)
+
+        condensed_df = pd.DataFrame()
+        for col in initial_df.columns:
+            if col in required_columns:
+                condensed_df[col] = initial_df[col]
+
+        return condensed_df
 
     def melt_df(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
@@ -191,30 +239,29 @@ class SnpEff(object):
 
     def calculate_rank(self, initial_df):
         #pylint: disable=line-too-long
-        for item in SnpEff._POSSIBLE_VALUES:
-            if item not in initial_df.columns:
-                initial_df[item] = 0
-            initial_df[item + "_initial_sum"] = initial_df[item].map(int)
+        initial_df = initial_df.applymap(str)
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        initial_df[initial_df == "."] = None
 
-        impact_df = self._calculate_impacts(initial_df)
-        scored_df = self._calculate_score(impact_df)
+        scored_df = pd.DataFrame()
+        scored_df["GENE_SYMBOL"] = initial_df["GENE_SYMBOL"]
+        for sample in sample_cols:
+            dummy, samp_number, suffix = sample.split("|")
+            #set sample columns equal to impact column value
+            initial_df[sample][initial_df[sample] != None] = initial_df[self.impact_column]
+            scored_df[sample + "_SCORE"] = initial_df[sample].map(SnpEff._RANK_SCORES)
+            initial_df["|".join([self.name, self.column_label, samp_number, suffix])] = initial_df[sample].map(SnpEff._RANK_ABBREVS)
+            del initial_df[sample]
 
-        expanded_df = scored_df.unstack()
+        ranked_df = initial_df.groupby("GENE_SYMBOL").sum()
+        score = scored_df.groupby("GENE_SYMBOL").sum().apply(sum, 1)
 
-        expanded_df[self.impact_score_column] = expanded_df[self.impact_score].sum(axis=1)
-        expanded_df = self._calculate_impact_score(expanded_df)
-        expanded_df = self._calculate_impact_rank(expanded_df)
+        ranked_df[self.impact_score_column] = score
+        ranked_df = ranked_df.sort(self.impact_score_column, ascending=0)
+        ranked_df[self.impact_rank_column] = ranked_df[self.impact_score_column].rank(ascending=0, method="min")
+        del ranked_df[self.impact_column]
 
-        del expanded_df[self.impact_score]
-        for item in SnpEff._POSSIBLE_VALUES:
-            del expanded_df[item + "_initial_sum"]
-
-        try:
-            expanded_df[self.impact_rank_column] = expanded_df[self.impact_rank_column].apply(lambda x: str(int(x)))
-        except ValueError:
-            pass
-
-        return expanded_df
+        return ranked_df
 
     def _calculate_impacts(self, initial_df):
         high = initial_df["HIGH"].apply(lambda x: "h" * x)
@@ -314,11 +361,10 @@ class SnpEff(object):
 class SummaryColumns(object):
     def __init__(self):
         self.name = "Summary Columns"
-        self.groupby_column = "GENE_SYMBOL"
 
     def summarize(self, initial_df):
         sample_df =  initial_df.filter(regex=_SAMPLENAME_REGEX)
-        sample_df[self.groupby_column] = initial_df[self.groupby_column]
+        sample_df["GENE_SYMBOL"] = initial_df["GENE_SYMBOL"]
 
         summary_df = pd.DataFrame()
         summary_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
@@ -327,21 +373,24 @@ class SummaryColumns(object):
 
         return summary_df
 
-    def calculate_total_samples(self, sample_df):
+    @staticmethod
+    def calculate_total_samples(sample_df):
         sample_df = sample_df.applymap(str)
         sample_df[sample_df == '.'] = None
-        sample_df = sample_df.groupby(self.groupby_column).count()
+        sample_df = sample_df.groupby("GENE_SYMBOL").count()
         sample_df[sample_df > 0] = 1
 
         return sample_df.apply(sum, 1)
 
-    def calculate_total_loci(self, sample_df):
-        return sample_df.groupby(self.groupby_column).count().ix[:,0]
+    @staticmethod
+    def calculate_total_loci(sample_df):
+        return sample_df.groupby("GENE_SYMBOL").count().ix[:,0]
 
-    def calculate_total_mutations(self, sample_df):
+    @staticmethod
+    def calculate_total_mutations(sample_df):
         sample_df = sample_df.applymap(str)
         sample_df[sample_df == '.'] = None
-        return sample_df.groupby(self.groupby_column).count().apply(sum, 1)
+        return sample_df.groupby("GENE_SYMBOL").count().apply(sum, 1)
 
     @staticmethod
     def rearrange_columns(initial_df):
@@ -370,16 +419,16 @@ def _validate_df(initial_df):
     if not sample_column:
         raise BaseException(msg)
 
-def _remove_unnecessary_columns(initial_df):
-    sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
-    required_columns = list(sample_cols.columns)
-    required_columns.extend(_REQUIRED_COLUMNS)
-
-    for col in initial_df.columns:
-        if col not in required_columns:
-            del initial_df[col]
-
-    return initial_df
+# def _remove_unnecessary_columns(initial_df):
+#     sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+#     required_columns = list(sample_cols.columns)
+#     required_columns.extend(_REQUIRED_COLUMNS)
+# 
+#     for col in initial_df.columns:
+#         if col not in required_columns:
+#             del initial_df[col]
+# 
+#     return initial_df
 
 def _combine_dfs(dfs):
     summary_df, dbnsfp_df, snpeff_df = dfs.values()
@@ -403,16 +452,15 @@ def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
 
     initial_df = _create_df(input_file)
-    condensed_df = _remove_unnecessary_columns(initial_df)
 
     annotations = [SummaryColumns(), dbNSFP(), SnpEff()]
     annotation_dfs = OrderedDict()
 
     for annotation in annotations:
         print "Generating {} rollup information".format(annotation.name)
-        summarized_df = annotation.summarize(condensed_df)
-        rearranged_df = annotation.rearrange_columns(summarized_df)
-        annotation_dfs[annotation.name] = rearranged_df
+        summarized_df = annotation.summarize(initial_df)
+#         rearranged_df = annotation.rearrange_columns(summarized_df)
+        annotation_dfs[annotation.name] = summarized_df
 
     combined_df = _combine_dfs(annotation_dfs)
     combined_df.to_csv(output_file, sep="\t", index=True)
