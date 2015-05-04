@@ -271,7 +271,7 @@ class SnpEff(object):
             elif col == self.impact_score_column:
                 score.append(col)
             else:
-                regex = "^{}\|{}\|.*".format(self.name, self.column_label)
+                regex = r"^{}\|{}\|.*".format(self.name, self.column_label)
                 if re.match(regex, col):
                     impact.append(col)
                 else:
@@ -289,11 +289,12 @@ def _create_df(input_file):
     return initial_df
 
 def _validate_df(initial_df):
-    msg = ("Input file is missing required headers ({}). "
-           "Review input and try again.",
-           _REQUIRED_COLUMNS)
     header = set(initial_df.columns.values)
-    if not _REQUIRED_COLUMNS.issubset(header):
+    missing_columns = _REQUIRED_COLUMNS.difference(header)
+    msg = ("Input file is missing required headers ({}). "
+           "Review input and try again."
+           ).format(missing_columns)
+    if missing_columns:
         raise BaseException(msg)
 
     sample_column = 0
