@@ -28,7 +28,6 @@ class GeneRollupArgsTestCase(unittest.TestCase):
         rollup_genes._XLSX = self.default_xlsx
 
     def test_change_global_variables_sample(self):
-        self.assertEquals("JQ_SUMMARY_SOM_COUNT.*", rollup_genes._SAMPLENAME_REGEX)
         args = Namespace(input_file="input",
                          output_file="output",
                          sample_column_regex="Sample.*",
@@ -38,7 +37,6 @@ class GeneRollupArgsTestCase(unittest.TestCase):
         self.assertEquals("Sample.*", rollup_genes._SAMPLENAME_REGEX)
 
     def test_change_global_variables_gene(self):
-        self.assertEquals("gene symbol", rollup_genes._GENE_SYMBOL)
         args = Namespace(input_file="input",
                          output_file="output",
                          sample_column_regex=None,
@@ -48,7 +46,6 @@ class GeneRollupArgsTestCase(unittest.TestCase):
         self.assertEquals("GeneSymbol", rollup_genes._GENE_SYMBOL)
 
     def test_change_global_variables_xlsx(self):
-        self.assertEquals(False, rollup_genes._XLSX)
         args = Namespace(input_file="input",
                          output_file="output",
                          sample_column_regex=None,
@@ -99,6 +96,14 @@ CREBBP\thhh\t.\t1'''
         self.assertEquals(["CREBBP", "BRCA1", "EGFR"], list(sorted_df.index.values))
 
 class dbNSFPTestCase(unittest.TestCase):
+    def setUp(self):
+        rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
+        rollup_genes._GENE_SYMBOL = "GENE_SYMBOL"
+        rollup_genes._XLSX = False
+
+    def tearDown(self):
+        pass
+
     def test_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -111,8 +116,8 @@ CREBBP\t2\t0\t.'''
 
         expected_string =\
 '''GENE_SYMBOL\tdbNSFP|overall damaging rank\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\t1\t5\t5
-CREBBP\t2\t2\t2'''
+BRCA1\t1.0\t2.0\t5.0
+CREBBP\t2.0\t2.0\t0.0'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
 
@@ -135,15 +140,14 @@ CREBBP\t2\t0\t.'''
     def test_calculate_rank_tie(self):
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\t2\t1\t1
-BRCA1\t3\t.\t1
+BRCA1\t5\t.\t1
 CREBBP\t5\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         dbNSFP = rollup_genes.dbNSFP()
 
         ranked_df = dbNSFP._calculate_rank(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals([1, 1], list(ranked_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals([1.0, 1.0], list(ranked_df["dbNSFP|overall damaging rank"].values))
 
     def test_change_col_order(self):
         input_string =\
@@ -159,6 +163,14 @@ CREBBP\tm\t.\t2'''
                             list(rearranged_df.columns.values))
 
 class SnpEffTestCase(unittest.TestCase):
+    def setUp(self):
+        rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
+        rollup_genes._GENE_SYMBOL = "GENE_SYMBOL"
+        rollup_genes._XLSX = False
+
+    def tearDown(self):
+        pass
+
     def test_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -254,6 +266,14 @@ CREBBP\tm\t.\t1\t2'''
                             list(rearranged_df.columns.values))
 
 class SummaryColumnsTestCase(unittest.TestCase):
+    def setUp(self):
+        rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
+        rollup_genes._GENE_SYMBOL = "GENE_SYMBOL"
+        rollup_genes._XLSX = False
+
+    def tearDown(self):
+        pass
+
     def test_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -312,6 +332,14 @@ CREBBP|0|.'''
 
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
+    def setUp(self):
+        rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
+        rollup_genes._GENE_SYMBOL = "GENE_SYMBOL"
+        rollup_genes._XLSX = False
+
+    def tearDown(self):
+        pass
+
     def test_rollup_genes(self):
         with TempDirectory() as output_dir:
             test_dir = os.path.dirname(os.path.realpath(__file__))

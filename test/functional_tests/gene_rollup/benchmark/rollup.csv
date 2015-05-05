@@ -1,4 +1,4 @@
 gene symbol	total impacted samples	distinct loci	total mutations	dbNSFP|overall damaging rank	dbNSFP|damaging votes|P1|NORMAL	dbNSFP|damaging votes|P1|TUMOR	dbNSFP|damaging votes|P2|NORMAL	dbNSFP|damaging votes|P2|TUMOR	SnpEff|overall impact rank	SnpEff|overall impact score	SnpEff|impact category|HIGH	SnpEff|impact category|MODERATE	SnpEff|impact category|LOW	SnpEff|impact category|MODIFIER	SnpEff|impact|P1|NORMAL	SnpEff|impact|P1|TUMOR	SnpEff|impact|P2|NORMAL	SnpEff|impact|P2|TUMOR
-BRCA1	2	1	2	1.0					2.0	200000.0	2	0	0	0			h	h
-CREBBP	4	2	8	2.0	14.0	14.0	14.0	14.0	1.0	400004.0	4	4	0	0	hm	hm	hm	hm
-TP53	4	1	4	3.0	4.0	4.0	4.0	4.0	3.0	4e-05	0	0	4	0	l	l	l	l
+CREBBP	4.0	2.0	8.0	1.0	14.0	14.0	14.0	14.0	1.0	400004.0	4.0	4.0	0.0	0.0	hm	hm	hm	hm
+TP53	4.0	1.0	4.0	2.0	4.0	4.0	4.0	4.0	3.0	4e-05	0.0	0.0	4.0	0.0	l	l	l	l
+BRCA1	2.0	1.0	2.0	3.0	0.0	0.0	1.0	1.0	2.0	200000.0	2.0	0.0	0.0	0.0			h	h
