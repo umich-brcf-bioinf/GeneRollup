@@ -68,12 +68,24 @@ CREBBP\t5\t0\t.'''
         dbNSFP = rollup_genes.dbNSFP()
 
         ranked_df = dbNSFP._calculate_rank(input_df)
-        print ranked_df
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
         self.assertEquals([1, 1], list(ranked_df["dbNSFP|overall damaging rank"].values))
 
+    def test_change_col_order(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tdbNSFP|overall damaging rank
+BRCA1\th\thl\t1
+CREBBP\tm\t.\t2'''
+        input_df = dataframe(input_string, sep="\t")
+        dbNSFP = rollup_genes.dbNSFP()
+
+        indexed_df = input_df.set_index(["GENE_SYMBOL"])
+        rearranged_df = dbNSFP._change_col_order(indexed_df)
+        self.assertEquals(["dbNSFP|overall damaging rank", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
+                            list(rearranged_df.columns.values))
+
 class SnpEffTestCase(unittest.TestCase):
-    def test_calculate_rank(self):
+    def test_calculate_score(self):
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\tHIGH\t1\t1
@@ -82,23 +94,68 @@ CREBBP\tMODERATE\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         SnpEff = rollup_genes.SnpEff()
 
-        ranked_df = SnpEff._calculate_rank(input_df)
+        scored_df = SnpEff._calculate_score(input_df)
+        self.assertEquals(["BRCA1", "CREBBP"], list(scored_df.index.values))
+        int_scores = [int(i) for i in list(scored_df["SnpEff|overall impact score"].values)]
+        self.assertEquals([200000, 1], int_scores)
+
+    def test_get_impact_category_counts(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\thh\tl
+CREBBP\tm\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        SnpEff = rollup_genes.SnpEff()
+
+        grouped_df = input_df.groupby("GENE_SYMBOL").sum()
+        category_df = SnpEff._get_impact_category_counts(grouped_df)
+
+        self.assertEquals(["BRCA1", "CREBBP"], list(category_df.index.values))
+        self.assertEquals([2, 0], list(category_df["SnpEff|impact category|HIGH"]))
+        self.assertEquals([0, 1], list(category_df["SnpEff|impact category|MODERATE"]))
+        self.assertEquals([1, 0], list(category_df["SnpEff|impact category|LOW"]))
+        self.assertEquals([0, 0], list(category_df["SnpEff|impact category|MODIFIER"]))
+
+    def test_calculate_rank(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
+BRCA1\thh\tl\t200000
+CREBBP\tm\t.\t1'''
+        input_df = dataframe(input_string, sep="\t")
+        SnpEff = rollup_genes.SnpEff()
+
+        grouped_df = input_df.groupby("GENE_SYMBOL").sum()
+        ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
         self.assertEquals([1, 2], list(ranked_df["SnpEff|overall impact rank"].values))
 
     def test_calculate_rank_tie(self):
         input_string =\
-'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\tLOW\t1\t1
-CREBBP\tLOW\t0\t.'''
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
+BRCA1\t.\tm\t1
+CREBBP\tm\t.\t1'''
         input_df = dataframe(input_string, sep="\t")
         SnpEff = rollup_genes.SnpEff()
 
-        ranked_df = SnpEff._calculate_rank(input_df)
+        grouped_df = input_df.groupby("GENE_SYMBOL").sum()
+        ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
         self.assertEquals([1, 1], list(ranked_df["SnpEff|overall impact rank"].values))
+
+    def test_change_col_order(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score\tSnpEff|overall impact rank
+BRCA1\th\thl\t20000\t1
+CREBBP\tm\t.\t1\t2'''
+        input_df = dataframe(input_string, sep="\t")
+        SnpEff = rollup_genes.SnpEff()
+
+        indexed_df = input_df.set_index(["GENE_SYMBOL"])
+        rearranged_df = SnpEff._change_col_order(indexed_df)
+        self.assertEquals(["SnpEff|overall impact rank", "SnpEff|overall impact score", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
+                            list(rearranged_df.columns.values))
 
 class SummaryColumnsTestCase(unittest.TestCase):
     def test_calculate_total_samples(self):

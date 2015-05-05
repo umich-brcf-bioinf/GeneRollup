@@ -20,14 +20,15 @@ class dbNSFP(object):
     #pylint: disable=invalid-name
     def __init__(self):
         self.name = "dbNSFP"
+        self.column_label = "damaging votes"
         self.damaging_column = "dbNSFP_rollup_damaging"
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
-        self.column_label = "damaging votes"
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
         ranked_df = self._calculate_rank(condensed_df)
-        return ranked_df
+        rearranged_df = self._change_col_order(ranked_df)
+        return rearranged_df
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -57,45 +58,32 @@ class dbNSFP(object):
 
             #set sample columns equal to damaging column value
             initial_df[sample][initial_df[sample] != None] = initial_df[self.damaging_column]
-            initial_df[sample].fillna(0, inplace=True)
-            initial_df[sample_name] = initial_df[sample].apply(int)
+            initial_df[sample_name] = initial_df[sample].apply(float)
 
             del initial_df[sample]
 
         ranked_df = initial_df.groupby("GENE_SYMBOL").sum()
-        ranked_df = ranked_df.applymap(int)
         ranked_df[self.damaging_rank_column] = ranked_df.apply(sum, 1)
 
+        ranked_df.fillna("", inplace=True)
         ranked_df = ranked_df.sort(self.damaging_rank_column, ascending=0)
         ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].rank(ascending=0, method="min")
 
         return ranked_df
 
-    def _change_col_order(self, new_column_names):
-        #TODO: (jebene) hookup this method
+    def _change_col_order(self, initial_df):
         ordered_names = []
-        samples = ""
-        variants = ""
-        mutations = ""
-        for col in new_column_names:
-            if col == _LOCI_COUNT:
-                variants = col
-            elif col == _SAMPLE_COUNT:
-                samples = col
-            elif col == _MUTATION_COUNT:
-                mutations = col
-            elif col == self.damaging_rank_column:
-                ordered_names.insert(0, col)
+        rank = []
+        for col in initial_df.columns.values:
+            if col == self.damaging_rank_column:
+                rank.append(col)
             else:
                 ordered_names.append(col)
 
-        if variants:
-            ordered_names.insert(0, variants)
-        if samples:
-            ordered_names.insert(1, samples)
-        if mutations:
-            ordered_names.insert(2, mutations)
-        return ordered_names
+        all_names = rank + ordered_names
+
+        initial_df = initial_df[all_names]
+        return initial_df
 
 
 class SnpEff(object):
@@ -108,18 +96,19 @@ class SnpEff(object):
     #pylint: disable=invalid-name
     def __init__(self):
         self.name = "SnpEff"
+        self.column_label = "impact"
         self.impact_column = "SNPEFF_TOP_EFFECT_IMPACT"
         self.impact_rank_column = "SnpEff|overall impact rank"
-        self.impact_score = "impact score"
         self.impact_score_column = "SnpEff|overall impact score"
-        self.column_label = "impact"
         self.impact_category = "SnpEff|impact category|{}"
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
-#         modified_df, score = self._preprocess_df(condensed_df)
-        ranked_df = self._calculate_rank(condensed_df)
-        return ranked_df
+        scored_df = self._calculate_score(condensed_df)
+        category_df = self._get_impact_category_counts(scored_df)
+        ranked_df = self._calculate_rank(category_df)
+        rearranged_df = self._change_col_order(ranked_df)
+        return rearranged_df
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -133,55 +122,78 @@ class SnpEff(object):
 
         return condensed_df
 
-    def _calculate_rank(self, initial_df):
-        #TODO: (jebene) add counts for HIGH, MODERATE, etc.
-
-        #pylint: disable=line-too-long
+    def _calculate_score(self, initial_df):
+    #pylint: disable=line-too-long
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
-
         initial_df = initial_df.applymap(str)
-        initial_df[initial_df == "."] = None
 
         scored_df = pd.DataFrame()
         scored_df["GENE_SYMBOL"] = initial_df["GENE_SYMBOL"]
 
+        for sample in sample_cols:
+            #set sample columns equal to impact column value
+            initial_df[sample][initial_df[sample] != "."] = initial_df[self.impact_column]
+
+            scored_df[sample + "_SCORE"] = initial_df[sample].map(SnpEff._RANK_SCORES)
+            initial_df[sample] = initial_df[sample].map(SnpEff._RANK_ABBREVS)
+
+        initial_df.fillna("", inplace=True)
+        scored_df.fillna(0, inplace=True)
+
+        score = scored_df.groupby("GENE_SYMBOL").sum().apply(sum, 1)
+        ranked_df = initial_df.groupby("GENE_SYMBOL").sum()
+        ranked_df = ranked_df[ranked_df.index != "."]
+
+        if self.impact_column in ranked_df.columns.values:
+            del ranked_df[self.impact_column]
+
+        ranked_df[self.impact_score_column] = score
+
+        return ranked_df
+
+    def _get_impact_category_counts(self, initial_df):
+        #pylint: disable=line-too-long
+        def _count_category(abbrev):
+            sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+            temp_df = pd.DataFrame()
+            for sample_col in sample_cols:
+                temp_df[sample_col] = initial_df[sample_col].apply(lambda x: len([i for i in x if i == abbrev]))
+            return temp_df.apply(sum, 1)
+
+        category_df = initial_df.copy()
+        category_df[self.impact_category.format("HIGH")] = _count_category("h")
+        category_df[self.impact_category.format("MODERATE")] = _count_category("m")
+        category_df[self.impact_category.format("LOW")] = _count_category("l")
+        category_df[self.impact_category.format("MODIFIER")] = _count_category("x")
+
+        return category_df
+
+    def _rename_sample_columns(self, initial_df):
+        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         for sample in sample_cols:
             dummy, samp_number, suffix = sample.split("|")
             sample_name = "|".join([self.name,
                                     self.column_label,
                                     samp_number,
                                     suffix])
-
-            #set sample columns equal to impact column value
-            initial_df[sample][initial_df[sample] != None] = initial_df[self.impact_column]
-            initial_df[sample_name] = initial_df[sample].map(SnpEff._RANK_ABBREVS)
-            scored_df[sample + "_SCORE"] = initial_df[sample].map(SnpEff._RANK_SCORES)
-
+            initial_df[sample_name] = initial_df[sample]
             del initial_df[sample]
 
-        score = scored_df.groupby("GENE_SYMBOL").sum().apply(sum, 1)
-        ranked_df = initial_df.groupby("GENE_SYMBOL").sum()
+        return initial_df
 
-        if self.impact_column in ranked_df.columns.values:
-            del ranked_df[self.impact_column]
+    def _calculate_rank(self, initial_df):
+        #pylint: disable=line-too-long
+        category_df = initial_df.sort(self.impact_score_column, ascending=0)
+        category_df[self.impact_rank_column] = category_df[self.impact_score_column].rank(ascending=0, method="min")
 
-#         ranked_df["count"] = ranked_df.apply(sum, 1)
-#         print ranked_df
+        return self._rename_sample_columns(category_df)
 
-        ranked_df[self.impact_score_column] = score
-
-        ranked_df = ranked_df.sort(self.impact_score_column, ascending=0)
-        ranked_df[self.impact_rank_column] = ranked_df[self.impact_score_column].rank(ascending=0, method="min")
-
-        return ranked_df
-
-    def _change_col_order(self, new_column_names):
-        #TODO: (jebene) hookup this method
+    def _change_col_order(self, initial_df):
         rank = []
         score = []
         category = []
         impact = []
-        for col in new_column_names:
+        for col in initial_df.columns.values:
             if col == self.impact_rank_column:
                 rank.append(col)
             elif col == self.impact_score_column:
@@ -194,8 +206,9 @@ class SnpEff(object):
                     category.append(col)
 
         ordered_names = rank + score + category + impact
+        initial_df = initial_df[ordered_names]
 
-        return ordered_names
+        return initial_df
 
 
 class SummaryColumns(object):
@@ -236,6 +249,7 @@ class SummaryColumns(object):
     def rearrange_columns(initial_df):
         initial_df.index.names=[_GENE_SYMBOL]
         return initial_df
+
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
