@@ -2,6 +2,7 @@
 #pylint: disable=maybe-no-member, too-few-public-methods
 from __future__ import absolute_import
 
+from argparse import Namespace
 from StringIO import StringIO
 import os
 import unittest
@@ -14,6 +15,47 @@ import pandas as pd
 
 def dataframe(input_data, sep="|"):
     return pd.read_csv(StringIO(input_data), sep=sep, header=0)
+
+class GeneRollupArgsTestCase(unittest.TestCase):
+    def setUp(self):
+        self.default_sample_regex = rollup_genes._SAMPLENAME_REGEX
+        self.default_gene = rollup_genes._GENE_SYMBOL
+        self.default_xlsx = rollup_genes._XLSX
+
+    def tearDown(self):
+        rollup_genes._SAMPLENAME_REGEX = self.default_sample_regex
+        rollup_genes._GENE_SYMBOL = self.default_gene
+        rollup_genes._XLSX = self.default_xlsx
+
+    def test_change_global_variables_sample(self):
+        self.assertEquals("JQ_SUMMARY_SOM_COUNT.*", rollup_genes._SAMPLENAME_REGEX)
+        args = Namespace(input_file="input",
+                         output_file="output",
+                         sample_column_regex="Sample.*",
+                         gene_column_name=None,
+                         xlsx=None)
+        rollup_genes._change_global_variables(args)
+        self.assertEquals("Sample.*", rollup_genes._SAMPLENAME_REGEX)
+
+    def test_change_global_variables_gene(self):
+        self.assertEquals("gene symbol", rollup_genes._GENE_SYMBOL)
+        args = Namespace(input_file="input",
+                         output_file="output",
+                         sample_column_regex=None,
+                         gene_column_name="GeneSymbol",
+                         xlsx=None)
+        rollup_genes._change_global_variables(args)
+        self.assertEquals("GeneSymbol", rollup_genes._GENE_SYMBOL)
+
+    def test_change_global_variables_xlsx(self):
+        self.assertEquals(False, rollup_genes._XLSX)
+        args = Namespace(input_file="input",
+                         output_file="output",
+                         sample_column_regex=None,
+                         gene_column_name=None,
+                         xlsx=True)
+        rollup_genes._change_global_variables(args)
+        self.assertEquals(True, rollup_genes._XLSX)
 
 class GeneRollupTestCase(unittest.TestCase):
     def test_create_df(self):
@@ -43,7 +85,39 @@ class GeneRollupTestCase(unittest.TestCase):
                                     rollup_genes._create_df,
                                     StringIO(input_string))
 
+    def test_sort_by_dbnsfp_rank(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tdbNSFP|overall damaging rank
+BRCA1\th\thl\t2
+EGFR\tm\t.\t3
+CREBBP\thhh\t.\t1'''
+        input_df = dataframe(input_string, sep="\t")
+        input_df = input_df.set_index("GENE_SYMBOL")
+        sorted_df = rollup_genes._sort_by_dbnsfp_rank(input_df)
+
+        self.assertEquals([1, 2, 3], list(sorted_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals(["CREBBP", "BRCA1", "EGFR"], list(sorted_df.index.values))
+
 class dbNSFPTestCase(unittest.TestCase):
+    def test_summarize(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t2\t1\t1
+BRCA1\t3\t.\t1
+CREBBP\t2\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        dbNSFP = rollup_genes.dbNSFP()
+        summarized_df = dbNSFP.summarize(input_df)
+
+        expected_string =\
+'''GENE_SYMBOL\tdbNSFP|overall damaging rank\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t1\t5\t5
+CREBBP\t2\t2\t2'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in summarized_df.values])
+
     def test_calculate_rank(self):
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -85,6 +159,28 @@ CREBBP\tm\t.\t2'''
                             list(rearranged_df.columns.values))
 
 class SnpEffTestCase(unittest.TestCase):
+    def test_summarize(self):
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\tHIGH\t1\t1
+BRCA1\tLOW\t.\t1
+CREBBP\tHIGH\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        SnpEff = rollup_genes.SnpEff()
+        summarized_df = SnpEff.summarize(input_df)
+        summarized_df = summarized_df.applymap(str)
+
+        expected_string =\
+'''GENE_SYMBOL\tSnpEff|overall impact rank\tSnpEff|overall impact score\tSnpEff|impact category|HIGH\tSnpEff|impact category|MODERATE\tSnpEff|impact category|LOW\tSnpEff|impact category|MODIFIER\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t1.0\t200000.00001\t2\t0\t1\t0\th\thl
+CREBBP\t2.0\t100000.0\t1\t0\t0\t0\th\t'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in summarized_df.values])
+
     def test_calculate_score(self):
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -158,6 +254,25 @@ CREBBP\tm\t.\t1\t2'''
                             list(rearranged_df.columns.values))
 
 class SummaryColumnsTestCase(unittest.TestCase):
+    def test_summarize(self):
+        input_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t1\t1
+BRCA1\t.\t1
+CREBBP\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        SummaryColumns = rollup_genes.SummaryColumns()
+        summarized_df = SummaryColumns.summarize(input_df)
+
+        expected_string =\
+'''GENE_SYMBOL\ttotal impacted samples\tdistinct loci\ttotal mutations
+BRCA1\t2\t2\t3
+CREBBP\t1\t1\t1'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in summarized_df.values])
+
     def test_calculate_total_samples(self):
         input_string =\
 '''GENE_SYMBOL|SampleA|SampleB

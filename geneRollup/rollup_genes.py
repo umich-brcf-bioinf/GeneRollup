@@ -15,6 +15,7 @@ _LOCI_COUNT = "distinct loci"
 _SAMPLE_COUNT = "total impacted samples"
 _MUTATION_COUNT = "total mutations"
 _GENE_SYMBOL = "gene symbol"
+_XLSX = False
 
 class dbNSFP(object):
     #pylint: disable=invalid-name
@@ -245,11 +246,6 @@ class SummaryColumns(object):
         sample_df[sample_df == '.'] = None
         return sample_df.groupby("GENE_SYMBOL").count().apply(sum, 1)
 
-    @staticmethod
-    def rearrange_columns(initial_df):
-        initial_df.index.names=[_GENE_SYMBOL]
-        return initial_df
-
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -278,11 +274,13 @@ def _combine_dfs(dfs):
     summary_df, dbnsfp_df, snpeff_df = dfs.values()
     combined_df = summary_df.join(dbnsfp_df, how='outer')
     combined_df = combined_df.join(snpeff_df, how='outer')
-    combined_df = combined_df.fillna(0)
-
     combined_df = combined_df.fillna("")
+    combined_df.index.names=[_GENE_SYMBOL]
 
     return combined_df
+
+def _sort_by_dbnsfp_rank(initial_df):
+    return initial_df.sort(dbNSFP().damaging_rank_column)
 
 def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
@@ -298,20 +296,47 @@ def _rollup(input_file, output_file):
         annotation_dfs[annotation.name] = summarized_df
 
     combined_df = _combine_dfs(annotation_dfs)
-    combined_df.to_csv(output_file, sep="\t", index=True)
+    sorted_df = _sort_by_dbnsfp_rank(combined_df)
 
+    if _XLSX:
+        try:
+            sorted_df.to_excel(output_file, index=True)
+        except ValueError:
+            msg = ("Unable to write [{}] to an Excel file. Review inputs and "
+                   "try again.").format(output_file)
+            raise BaseException(msg)
+    else:
+        sorted_df.to_csv(output_file, sep="\t", index=True)
+
+    print "Wrote to [{}]".format(output_file)
     print "Done."
+
+def _change_global_variables(args):
+    #pylint: disable=global-statement
+    if args.sample_column_regex:
+        global _SAMPLENAME_REGEX
+        _SAMPLENAME_REGEX = args.sample_column_regex
+    if args.gene_column_name:
+        global _GENE_SYMBOL
+        _GENE_SYMBOL = args.gene_column_name
+    if args.xlsx:
+        global _XLSX
+        _XLSX = args.xlsx
 
 def _add_arg_parse(args):
     parser = argparse.ArgumentParser()
     #pylint: disable=line-too-long
     parser.add_argument("input_file", help=("A tab-delimited file of variants x samples"))
     parser.add_argument("output_file", help=("A tab-delimited file of genes x samples"))
+    parser.add_argument("--sample_column_regex", help="Regex used to define the sample columns in the input file. Default is 'JQ_SUMMARY_SOM_COUNT.*'")
+    parser.add_argument("--gene_column_name", help="Name of gene symbol column in the output file. Default is 'gene symbol'")
+    parser.add_argument("--xlsx", action="store_true", help="Write to an xlsx file rather than a tsv file")
 
     return parser.parse_args(args)
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
+    _change_global_variables(args)
     _rollup(args.input_file, args.output_file)
 
 if __name__ == "__main__":
