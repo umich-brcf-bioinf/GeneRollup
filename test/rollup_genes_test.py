@@ -195,9 +195,9 @@ CREBBP\t2.0\t100000.0\t1\t0\t0\t0\th\t'''
 
     def test_calculate_score(self):
         input_string =\
-'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\tHIGH\t1\t1
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\tLOW\t.\t1
+BRCA1\tHIGH\t1\t1
 CREBBP\tMODERATE\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         SnpEff = rollup_genes.SnpEff()
@@ -207,9 +207,12 @@ CREBBP\tMODERATE\t0\t.'''
         int_scores = [int(i) for i in list(scored_df["SnpEff|overall impact score"].values)]
         self.assertEquals([200000, 1], int_scores)
 
+        self.assertEquals(["h", "m"], list(scored_df["JQ_SUMMARY_SOM_COUNT|P1|NORMAL"]))
+        self.assertEquals(["hl", ""], list(scored_df["JQ_SUMMARY_SOM_COUNT|P1|TUMOR"]))
+
     def test_get_impact_category_counts(self):
         input_string =\
-'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\thh\tl
 CREBBP\tm\t.'''
         input_df = dataframe(input_string, sep="\t")

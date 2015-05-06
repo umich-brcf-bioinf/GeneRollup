@@ -92,7 +92,7 @@ class SnpEff(object):
     _RANK_SCORES =  {"HIGH": 100000.0,
                      "MODERATE": 1,
                      "LOW": 1/100000.0,
-                     "MODIFIER": 10**12}
+                     "MODIFIER": 1/10**12}
     _RANK_ABBREVS =  {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
     #pylint: disable=invalid-name
@@ -143,15 +143,16 @@ class SnpEff(object):
         scored_df.fillna(0, inplace=True)
 
         score = scored_df.groupby(_GENE_SYMBOL).sum().apply(sum, 1)
-        ranked_df = initial_df.groupby(_GENE_SYMBOL).sum()
-        ranked_df = ranked_df[ranked_df.index != "."]
+        grouped_df = initial_df.groupby(_GENE_SYMBOL).sum()
+        grouped_df = grouped_df[grouped_df.index != "."]
+        grouped_df = grouped_df.applymap(lambda x: "".join(sorted(x)))
 
-        if self.impact_column in ranked_df.columns.values:
-            del ranked_df[self.impact_column]
+        if self.impact_column in grouped_df.columns.values:
+            del grouped_df[self.impact_column]
 
-        ranked_df[self.impact_score_column] = score
+        grouped_df[self.impact_score_column] = score
 
-        return ranked_df
+        return grouped_df
 
     def _get_impact_category_counts(self, initial_df):
         #pylint: disable=line-too-long
