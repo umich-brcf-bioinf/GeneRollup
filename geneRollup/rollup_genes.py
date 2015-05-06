@@ -28,8 +28,11 @@ class dbNSFP(object):
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
         ranked_df = self._calculate_rank(condensed_df)
-        rearranged_df = self._change_col_order(ranked_df)
-        return rearranged_df
+        data_df = self._change_col_order(ranked_df)
+
+#TODO: (jebene) add format/style df
+        styled_df = data_df.copy()
+        return data_df, styled_df
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -96,21 +99,25 @@ class SnpEff(object):
     _RANK_ABBREVS =  {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
     #pylint: disable=invalid-name
-    def __init__(self):
+    def __init__(self, format_rule):
         self.name = "SnpEff"
         self.column_label = "impact"
         self.impact_column = "SNPEFF_TOP_EFFECT_IMPACT"
         self.impact_rank_column = "SnpEff|overall impact rank"
         self.impact_score_column = "SnpEff|overall impact score"
         self.impact_category = "SnpEff|impact category|{}"
+        self.format_rule = format_rule
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
         scored_df = self._calculate_score(condensed_df)
         category_df = self._get_impact_category_counts(scored_df)
         ranked_df = self._calculate_rank(category_df)
-        rearranged_df = self._change_col_order(ranked_df)
-        return rearranged_df
+        data_df = self._change_col_order(ranked_df)
+        format_df = self.format_rule.format(data_df)
+        style_df = self.format_rule.style(format_df)
+
+        return data_df, style_df
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -222,12 +229,14 @@ class SummaryColumns(object):
         sample_df =  initial_df.filter(regex=_SAMPLENAME_REGEX)
         sample_df[_GENE_SYMBOL] = initial_df[_GENE_SYMBOL]
 
-        summary_df = pd.DataFrame()
-        summary_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
-        summary_df[_LOCI_COUNT] = self.calculate_total_loci(sample_df)
-        summary_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
+        data_df = pd.DataFrame()
+        data_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
+        data_df[_LOCI_COUNT] = self.calculate_total_loci(sample_df)
+        data_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
 
-        return summary_df
+#TODO: (jebene) add format/style df
+        styled_df = data_df.copy()
+        return data_df, styled_df
 
     @staticmethod
     def calculate_total_samples(sample_df):
@@ -248,6 +257,39 @@ class SummaryColumns(object):
         sample_df[sample_df == '.'] = None
         return sample_df.groupby(_GENE_SYMBOL).count().apply(sum, 1)
 
+
+class SnpEffFormatRule(object):
+    def __init__(self):
+        pass
+
+    def format(self, data_df):
+        def _determine_format(cell_value):
+            for letter in ["h", "m", "l", "x"]:
+                if letter in cell_value:
+                    return letter
+            return ""
+
+        data_df = data_df.applymap(str)
+        format_df = data_df.applymap(_determine_format)
+
+        return format_df
+
+    def style(self, format_df):
+        def _determine_style(cell_value):
+            return style_rules[cell_value]
+
+        style_rules = {"h": {"background-color": "#003366",
+                             "text-color": "#003366"},
+                       "m": {"background-color": "#6699FF",
+                             "text-color": "#6699FF"},
+                       "l": {"background-color": "#CCCCFF",
+                             "text-color": "#CCCCFF"},
+                       "x": {"background-color": "#999999",
+                             "text-color": "#999999"},
+                       "": ""}
+        style_df = format_df.applymap(_determine_style)
+
+        return style_df
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -293,12 +335,12 @@ def _rollup(input_file, output_file):
 
     initial_df = _create_df(input_file)
 
-    annotations = [SummaryColumns(), dbNSFP(), SnpEff()]
+    annotations = [SummaryColumns(), dbNSFP(), SnpEff(SnpEffFormatRule())]
     annotation_dfs = OrderedDict()
 
     for annotation in annotations:
         print "Generating {} rollup information".format(annotation.name)
-        summarized_df = annotation.summarize(initial_df)
+        summarized_df, styled_df = annotation.summarize(initial_df)
         annotation_dfs[annotation.name] = summarized_df
 
     combined_df = _combine_dfs(annotation_dfs)
