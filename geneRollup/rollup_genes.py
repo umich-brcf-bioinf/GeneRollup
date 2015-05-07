@@ -21,20 +21,19 @@ _GENE_SYMBOL_OUTPUT_NAME = "gene symbol"
 
 class dbNSFP(object):
     #pylint: disable=invalid-name
-    def __init__(self):
+    def __init__(self, format_rule):
         self.name = "dbNSFP"
         self.column_label = "damaging votes"
         self.damaging_column = "dbNSFP_rollup_damaging"
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
+        self.format_rule = format_rule
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
         ranked_df = self._calculate_rank(condensed_df)
         data_df = self._change_col_order(ranked_df)
+        style_df = self.format_rule.format(data_df)
 
-#TODO: (jebene) add format/style df
-        style_df = data_df.copy()
-        style_df = style_df.applymap(lambda x: "")
         return data_df, style_df
 
     def _remove_unnecessary_columns(self, initial_df):
@@ -296,6 +295,47 @@ class SnpEffFormatRule(object):
             return styled_cell
         return ""
 
+
+class dbNSFPFormatRule(object):
+    #from colour import Color
+#     _RANGE_RULE = list(white.range_to(orange, 100))
+    _RANGE_RULE = range(0,100)
+    _FONT_COLOR = "#000000"
+
+    def format(self, data_df):
+        def _determine_format(cell_value):
+            normalized_value = 100*(cell_value-min_value)/(max_value-min_value)
+            split_value = str(normalized_value).split(".")
+
+            if len(split_value) > 1:
+                return "%.3f" % normalized_value
+            else:
+#                 print normalized_value
+                return str(int(normalized_value))
+
+        #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant - pass in?
+        format_df =  data_df.drop("dbNSFP|overall damaging rank", 1)
+
+        format_df = format_df.applymap(int)
+
+        min_value = int(min(format_df.min()))
+        max_value = int(max(format_df.max()))
+#         print max_value
+        format_df = format_df.applymap(_determine_format)
+
+        format_df["dbNSFP|overall damaging rank"] = pd.Series()
+        format_df.fillna("", inplace=True)
+
+        return format_df
+
+    @staticmethod
+    def _style(cell_value):
+        cell_value = int(cell_value)
+        styled_cell = {"font_size": "12",
+                       "bg_color": dbNSFPFormatRule._RANGE_RULE[cell_value],
+                       "font_color": dbNSFPFormatRule._FONT_COLOR}
+        return styled_cell
+
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
     _validate_df(initial_df)
@@ -350,14 +390,14 @@ def _translate_to_excel(data_df, style_df, writer):
     writer.save()
 
 def _sort_by_dbnsfp_rank(initial_df):
-    return initial_df.sort(dbNSFP().damaging_rank_column)
+    return initial_df.sort(dbNSFP("").damaging_rank_column)
 
 def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
 
     initial_df = _create_df(input_file)
 
-    annotations = [SummaryColumns(), dbNSFP(), SnpEff(SnpEffFormatRule())]
+    annotations = [SummaryColumns(), dbNSFP(dbNSFPFormatRule()), SnpEff(SnpEffFormatRule())]
     annotation_dfs = OrderedDict()
     style_dfs = OrderedDict()
 
@@ -372,8 +412,6 @@ def _rollup(input_file, output_file):
     sorted_df = _sort_by_dbnsfp_rank(combined_df)
 
     combined_style_df = _combine_dfs(style_dfs)
-
-
     combined_style_df = combined_style_df.reset_index()
 
     if _XLSX:

@@ -69,39 +69,6 @@ class GeneRollupArgsTestCase(unittest.TestCase):
         rollup_genes._change_global_variables(args)
         self.assertEquals(True, rollup_genes._XLSX)
 
-    def test_translate_to_excel(self):
-        with TempDirectory() as output_dir:
-            output_dir.write("output.xlsx", "")
-            output_file = os.path.join(output_dir.path, "output.xlsx")
-            data_string =\
-'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
-MOD|mml|2
-NULL1||
-HIGH|hhmlx|1'''
-            data_df = dataframe(data_string)
-            data_df.fillna("", inplace=True)
-
-            style_string = \
-'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
-MOD||
-HIGH||
-NULL1||'''
-            style_df = dataframe(style_string)
-            style_df["PATIENT_A"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
-                                     "",
-                                     {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
-            style_df.fillna("", inplace=True)
-
-            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
-            rollup_genes._translate_to_excel(data_df, style_df, writer)
-
-            script_dir = os.path.dirname(os.path.realpath(__file__))
-            expected_output = os.path.join(script_dir,
-                                           "functional_tests",
-                                           "translate_to_excel",
-                                           "expected_output.xlsx")
-            filecmp.cmp(expected_output, output_file)
-
 class GeneRollupTestCase(unittest.TestCase):
     def test_create_df(self):
         input_string =\
@@ -143,6 +110,40 @@ CREBBP\thhh\t.\t1'''
         self.assertEquals([1, 2, 3], list(sorted_df["dbNSFP|overall damaging rank"].values))
         self.assertEquals(["CREBBP", "BRCA1", "EGFR"], list(sorted_df.index.values))
 
+    def test_translate_to_excel(self):
+        #pylint: disable=no-self-use
+        with TempDirectory() as output_dir:
+            output_dir.write("output.xlsx", "")
+            output_file = os.path.join(output_dir.path, "output.xlsx")
+            data_string =\
+'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
+MOD|mml|2
+NULL1||
+HIGH|hhmlx|1'''
+            data_df = dataframe(data_string)
+            data_df.fillna("", inplace=True)
+
+            style_string = \
+'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
+MOD||
+HIGH||
+NULL1||'''
+            style_df = dataframe(style_string)
+            style_df["PATIENT_A"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+                                     "",
+                                     {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
+            style_df.fillna("", inplace=True)
+
+            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
+            rollup_genes._translate_to_excel(data_df, style_df, writer)
+
+            script_dir = os.path.dirname(os.path.realpath(__file__))
+            expected_output = os.path.join(script_dir,
+                                           "functional_tests",
+                                           "translate_to_excel",
+                                           "expected_output.xlsx")
+            filecmp.cmp(expected_output, output_file)
+
 class dbNSFPTestCase(unittest.TestCase):
     def setUp(self):
         rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
@@ -152,33 +153,59 @@ class dbNSFPTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def xtest_summarize(self):
+    def test_summarize_dataMatrix(self):
+        FORMAT_DF = pd.DataFrame([[42] * 3] * 2)
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP(formatRule)
+
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t2\t1\t1
-BRCA1\t3\t.\t1
-CREBBP\t2\t0\t.'''
+BRCA1\t5\t.\t1
+CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        dbNSFP = rollup_genes.dbNSFP()
-        dummy, summarized_df = dbNSFP.summarize(input_df)
+        input_df = input_df.applymap(str)
+        (data_df, style_df) = dbNSFP.summarize(input_df)
+        self.assertEquals(data_df.shape, style_df.shape)
 
+        data_df = data_df.applymap(str)
         expected_string =\
 '''GENE_SYMBOL\tdbNSFP|overall damaging rank\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\t1.0\t2.0\t5.0
-CREBBP\t2.0\t2.0\t0.0'''
+BRCA1\t1.0\t2.0\t7.0
+CREBBP\t2.0\t3.0\t0.0'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
 
-        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in summarized_df.values])
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
+
+    def test_summarize_formatMatrix(self):
+        FORMAT_DF = pd.DataFrame([[42] * 3] * 2)
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP(formatRule)
+
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t2\t1\t1
+BRCA1\t5\t.\t1
+CREBBP\t3\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        (data_df, format_df) = dbNSFP.summarize(input_df)
+
+        self.assertIs(data_df, formatRule.last_data_df)
+        self.assertIs(FORMAT_DF, format_df)
 
     def test_calculate_rank(self):
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t2\t1\t1
 BRCA1\t3\t.\t1
 CREBBP\t2\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        dbNSFP = rollup_genes.dbNSFP()
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP(formatRule)
 
         ranked_df = dbNSFP._calculate_rank(input_df)
 
@@ -186,24 +213,28 @@ CREBBP\t2\t0\t.'''
         self.assertEquals([1, 2], list(ranked_df["dbNSFP|overall damaging rank"].values))
 
     def test_calculate_rank_tie(self):
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t5\t.\t1
 CREBBP\t5\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        dbNSFP = rollup_genes.dbNSFP()
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP(formatRule)
 
         ranked_df = dbNSFP._calculate_rank(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
         self.assertEquals([1.0, 1.0], list(ranked_df["dbNSFP|overall damaging rank"].values))
 
     def test_change_col_order(self):
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tdbNSFP|overall damaging rank
 BRCA1\th\thl\t1
 CREBBP\tm\t.\t2'''
         input_df = dataframe(input_string, sep="\t")
-        dbNSFP = rollup_genes.dbNSFP()
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP(formatRule)
 
         indexed_df = input_df.set_index(["GENE_SYMBOL"])
         rearranged_df = dbNSFP._change_col_order(indexed_df)
@@ -401,6 +432,7 @@ CREBBP|0|.'''
         self.assertEquals(["BRCA1", "CREBBP"], list(total_loci.index.values))
         self.assertEquals([2, 1], list(total_loci))
 
+
 class SnpEffFormatRuleTestCase(unittest.TestCase):
     def test_format_invalidDataMatrix(self):
         input_string =\
@@ -516,6 +548,85 @@ NULL1||'''
         expected_style = {"font_size": "4",
                           "bg_color": "#999999",
                           "font_color": "#999999"}
+
+        self.assertEquals(expected_style, actual_style)
+
+
+class dbNSFPFormatRuleTestCase(unittest.TestCase):
+    #TODO: (jebene) edit to account for decimals
+    def xtest_format_standalone(self):
+        input_string =\
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
+GENE1\t3\t1
+GENE2\t53\t1
+GENE3\t94\t1
+GENE4\t157\t1
+GENE5\t33\t1
+GENE6\t2\t1'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.dbNSFPFormatRule()
+        rule._style = lambda x: x
+
+        rollup_genes._SAMPLENAME_REGEX = "PATIENT.*"
+        actual_df = rule.format(data_df)
+
+        expected_string = \
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
+GENE1\t\t
+GENE2\t\t
+GENE3\t\t
+GENE4\t\t
+GENE5\t\t
+GENE6\t\t'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df["PATIENT_A"] = ["0.645", "32.903", "59.355", "100", "20", "0"]
+
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals(list([list(i) for i in expected_df.values]),
+                          list([list(i) for i in actual_df.values]))
+
+#TODO: (jebene) once colour is installed, make these tests pass
+    def xtest_style_lightest(self):
+        cell_value = "0"
+        rule = rollup_genes.dbNSFPFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#FFFFFF",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def xtest_style_lighter(self):
+        cell_value = "12"
+        rule = rollup_genes.dbNSFPFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#FFB870",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def xtest_style_darker(self):
+        cell_value = "12"
+        rule = rollup_genes.dbNSFPFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#FFB870",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def xtest_style_darkest(self):
+        cell_value = "12"
+        rule = rollup_genes.dbNSFPFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#FFB870",
+                          "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
 
