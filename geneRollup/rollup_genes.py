@@ -17,6 +17,8 @@ _MUTATION_COUNT = "total mutations"
 _REQUIRED_COLUMNS = set(["dbNSFP_rollup_damaging",
                          "SNPEFF_TOP_EFFECT_IMPACT"])
 
+_GENE_SYMBOL_OUTPUT_NAME = "gene symbol"
+
 class dbNSFP(object):
     #pylint: disable=invalid-name
     def __init__(self):
@@ -31,8 +33,9 @@ class dbNSFP(object):
         data_df = self._change_col_order(ranked_df)
 
 #TODO: (jebene) add format/style df
-        styled_df = data_df.copy()
-        return data_df, styled_df
+        style_df = data_df.copy()
+        style_df = style_df.applymap(lambda x: "")
+        return data_df, style_df
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -114,8 +117,7 @@ class SnpEff(object):
         category_df = self._get_impact_category_counts(scored_df)
         ranked_df = self._calculate_rank(category_df)
         data_df = self._change_col_order(ranked_df)
-        format_df = self.format_rule.format(data_df)
-        style_df = self.format_rule.style(format_df)
+        style_df = self.format_rule.format(data_df)
 
         return data_df, style_df
 
@@ -235,8 +237,10 @@ class SummaryColumns(object):
         data_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
 
 #TODO: (jebene) add format/style df
-        styled_df = data_df.copy()
-        return data_df, styled_df
+        style_df = data_df.copy()
+        style_df = style_df.applymap(lambda x: "")
+
+        return data_df, style_df
 
     @staticmethod
     def calculate_total_samples(sample_df):
@@ -259,12 +263,14 @@ class SummaryColumns(object):
 
 
 class SnpEffFormatRule(object):
-    def __init__(self):
-        pass
+    _COLOR_MAP = {"h": "#003366",
+                  "m": "#6699FF",
+                  "l": "#CCCCFF",
+                  "x": "#999999"}
 
     def format(self, data_df):
         def _determine_format(cell_value):
-            for letter in ["h", "m", "l", "x"]:
+            for letter in SnpEffFormatRule._COLOR_MAP.keys():
                 if letter in cell_value:
                     return letter
             return ""
@@ -272,24 +278,23 @@ class SnpEffFormatRule(object):
         data_df = data_df.applymap(str)
         format_df = data_df.applymap(_determine_format)
 
+        for column, dummy in format_df.iteritems():
+            for row, dummy in format_df.iterrows():
+                styled_cell = self._style(format_df.ix[row, column])
+                format_df.ix[row, column] = styled_cell
+
         return format_df
 
-    def style(self, format_df):
-        def _determine_style(cell_value):
-            return style_rules[cell_value]
-
-        style_rules = {"h": {"background-color": "#003366",
-                             "text-color": "#003366"},
-                       "m": {"background-color": "#6699FF",
-                             "text-color": "#6699FF"},
-                       "l": {"background-color": "#CCCCFF",
-                             "text-color": "#CCCCFF"},
-                       "x": {"background-color": "#999999",
-                             "text-color": "#999999"},
-                       "": ""}
-        style_df = format_df.applymap(_determine_style)
-
-        return style_df
+    @staticmethod
+    def _style(cell_value):
+        if len(cell_value) > 0:
+            styled_cell = {"font_size": "4",
+                           "bg_color": SnpEffFormatRule\
+                                               ._COLOR_MAP[cell_value],
+                           "font_color": SnpEffFormatRule\
+                                         ._COLOR_MAP[cell_value]}
+            return styled_cell
+        return ""
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -321,11 +326,28 @@ def _combine_dfs(dfs):
     combined_df = summary_df.join(dbnsfp_df, how='outer')
     combined_df = combined_df.join(snpeff_df, how='outer')
     combined_df = combined_df.fillna("")
-    combined_df.index.names=["gene symbol"]
+    combined_df.index.names=[_GENE_SYMBOL_OUTPUT_NAME]
 
     combined_df = combined_df[combined_df.index != "."]
 
     return combined_df
+
+def _translate_to_excel(data_df, style_df, writer):
+    worksheet_name = "gene_rollup"
+    data_df.to_excel(writer, sheet_name=worksheet_name, index=False)
+
+    workbook = writer.book
+    worksheet = writer.sheets[worksheet_name]
+
+    for i, (row, dummy) in enumerate(data_df.iterrows()):
+        for j, (column, dummy) in enumerate(data_df.iteritems()):
+            style = style_df.ix[row, column]
+
+            if len(style) > 0 and column != _GENE_SYMBOL_OUTPUT_NAME:
+                cell_format = workbook.add_format(style)
+                worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
+
+    writer.save()
 
 def _sort_by_dbnsfp_rank(initial_df):
     return initial_df.sort(dbNSFP().damaging_rank_column)
@@ -337,24 +359,36 @@ def _rollup(input_file, output_file):
 
     annotations = [SummaryColumns(), dbNSFP(), SnpEff(SnpEffFormatRule())]
     annotation_dfs = OrderedDict()
+    style_dfs = OrderedDict()
 
     for annotation in annotations:
         print "Generating {} rollup information".format(annotation.name)
-        summarized_df, styled_df = annotation.summarize(initial_df)
+        summarized_df, style_df = annotation.summarize(initial_df)
         annotation_dfs[annotation.name] = summarized_df
+        style_dfs[annotation.name] = style_df
 
     combined_df = _combine_dfs(annotation_dfs)
+    combined_df = combined_df.reset_index()
     sorted_df = _sort_by_dbnsfp_rank(combined_df)
+
+    combined_style_df = _combine_dfs(style_dfs)
+
+
+    combined_style_df = combined_style_df.reset_index()
 
     if _XLSX:
         try:
-            sorted_df.to_excel(output_file, sheet_name="gene_rollup", index=True)
+            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
+            _translate_to_excel(sorted_df, combined_style_df, writer)
+#             sorted_df.to_excel(output_file,
+#                                sheet_name="gene_rollup",
+#                                index=False)
         except ValueError:
             msg = ("Unable to write [{}] to an Excel file. Review inputs and "
                    "try again.").format(output_file)
             raise BaseException(msg)
     else:
-        sorted_df.to_csv(output_file, sep="\t", index=True)
+        sorted_df.to_csv(output_file, sep="\t", index=False)
 
     print "Wrote to [{}]".format(output_file)
     print "Done."

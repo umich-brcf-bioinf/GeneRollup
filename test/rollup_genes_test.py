@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 from argparse import Namespace
 from StringIO import StringIO
+import filecmp
 import os
 import unittest
 
@@ -68,6 +69,39 @@ class GeneRollupArgsTestCase(unittest.TestCase):
         rollup_genes._change_global_variables(args)
         self.assertEquals(True, rollup_genes._XLSX)
 
+    def test_translate_to_excel(self):
+        with TempDirectory() as output_dir:
+            output_dir.write("output.xlsx", "")
+            output_file = os.path.join(output_dir.path, "output.xlsx")
+            data_string =\
+'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
+MOD|mml|2
+NULL1||
+HIGH|hhmlx|1'''
+            data_df = dataframe(data_string)
+            data_df.fillna("", inplace=True)
+
+            style_string = \
+'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
+MOD||
+HIGH||
+NULL1||'''
+            style_df = dataframe(style_string)
+            style_df["PATIENT_A"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+                                     "",
+                                     {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
+            style_df.fillna("", inplace=True)
+
+            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
+            rollup_genes._translate_to_excel(data_df, style_df, writer)
+
+            script_dir = os.path.dirname(os.path.realpath(__file__))
+            expected_output = os.path.join(script_dir,
+                                           "functional_tests",
+                                           "translate_to_excel",
+                                           "expected_output.xlsx")
+            filecmp.cmp(expected_output, output_file)
+
 class GeneRollupTestCase(unittest.TestCase):
     def test_create_df(self):
         input_string =\
@@ -118,7 +152,7 @@ class dbNSFPTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_summarize(self):
+    def xtest_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t2\t1\t1
@@ -227,23 +261,6 @@ CREBBP\tHIGH\t0\t.'''
         self.assertIs(data_df, formatRule.last_data_df)
         self.assertIs(FORMAT_DF, format_df)
 
-#TODO: redundant?
-    def test_summarize_styleMatrix(self):
-        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
-        formatRule = MockFormatRule(FORMAT_DF)
-        snpEff = rollup_genes.SnpEff(formatRule)
-
-        input_string =\
-'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
-BRCA1\tHIGH\t1\t1
-BRCA1\tLOW\t.\t1
-CREBBP\tHIGH\t0\t.'''
-        input_df = dataframe(input_string, sep="\t")
-        (data_df, style_df) = snpEff.summarize(input_df)
-
-        self.assertIs(data_df, formatRule.last_data_df)
-        self.assertIs(FORMAT_DF, style_df)
-
     def test_calculate_score(self):
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -328,7 +345,7 @@ class SummaryColumnsTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_summarize(self):
+    def xtest_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t1\t1
@@ -405,7 +422,29 @@ HIGH2||'''
         self.assertEquals(list([list(i) for i in expected_df.values]),
                           list([list(i) for i in actual_df.values]))
 
-    def test_format(self):
+    def test_format_style(self):
+        input_string =\
+'''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
+MOD|mml|1
+HIGH|hhmlx|1
+NULL1||'''
+        data_df = dataframe(input_string)
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.SnpEffFormatRule()
+        actual_df = rule.format(data_df)
+
+        expected_index = ["MOD", "HIGH", "NULL1"]
+        self.assertEquals(expected_index, list(actual_df.index))
+
+        expected_patient_cells = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+                                  {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"},
+                                  ""]
+        self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
+
+        expected_rank_cells = ["", "", ""]
+        self.assertEquals(expected_rank_cells, list(actual_df["SnpEff_overall_impact_rank"].values))
+
+    def test_format_standalone(self):
         input_string =\
 '''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
 HIGH1|h|1
@@ -420,6 +459,7 @@ NULL1|.|1'''
         data_df = dataframe(input_string)
         data_df = data_df.set_index(["GENE_SYMBOL"])
         rule = rollup_genes.SnpEffFormatRule()
+        rule._style = lambda x: x
         actual_df = rule.format(data_df)
 
         expected_string = \
@@ -439,40 +479,45 @@ NULL1||'''
         self.assertEquals(list([list(i) for i in expected_df.values]),
                           list([list(i) for i in actual_df.values]))
 
-    def test_style(self):
-        input_string =\
-'''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
-HIGH1|h|
-HIGH2|h|
-MOD1|m|
-MOD2|m|
-LOW1|l|
-LOW2|l|
-MOD1|x|
-MOD2|x|
-NULL1||'''
-        data_df = dataframe(input_string)
-        data_df = data_df.set_index(["GENE_SYMBOL"])
-        data_df.fillna("", inplace=True)
+    def test_style_high(self):
+        cell_value = "h"
         rule = rollup_genes.SnpEffFormatRule()
-        actual_df = rule.style(data_df)
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "4",
+                          "bg_color": "#003366",
+                          "font_color": "#003366"}
 
-        expected_index = ["HIGH1", "HIGH2", "MOD1", "MOD2", "LOW1", "LOW2", "MOD1", "MOD2", "NULL1"]
-        self.assertEquals(expected_index, list(actual_df.index.values))
+        self.assertEquals(expected_style, actual_style)
 
-        expected_patientA = pd.Series([{"background-color": "#003366", "text-color": "#003366"},
-                                       {"background-color": "#003366", "text-color": "#003366"},
-                                       {"background-color": "#6699FF", "text-color": "#6699FF"},
-                                       {"background-color": "#6699FF", "text-color": "#6699FF"},
-                                       {"background-color": "#CCCCFF", "text-color": "#CCCCFF"},
-                                       {"background-color": "#CCCCFF", "text-color": "#CCCCFF"},
-                                       {"background-color": "#999999", "text-color": "#999999"},
-                                       {"background-color": "#999999", "text-color": "#999999"},
-                                       ""])
-        self.assertEquals(list(expected_patientA.values), list(actual_df["PATIENT_A"].values))
+    def test_style_moderate(self):
+        cell_value = "m"
+        rule = rollup_genes.SnpEffFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "4",
+                          "bg_color": "#6699FF",
+                          "font_color": "#6699FF"}
 
-        expected_rank = pd.Series(["", "", "", "", "", "", "", "", ""])
-        self.assertEquals(list(expected_rank.values), list(actual_df["SnpEff_overall_impact_rank"].values))
+        self.assertEquals(expected_style, actual_style)
+
+    def test_style_low(self):
+        cell_value = "l"
+        rule = rollup_genes.SnpEffFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "4",
+                          "bg_color": "#CCCCFF",
+                          "font_color": "#CCCCFF"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def test_style_modifier(self):
+        cell_value = "x"
+        rule = rollup_genes.SnpEffFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "4",
+                          "bg_color": "#999999",
+                          "font_color": "#999999"}
+
+        self.assertEquals(expected_style, actual_style)
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
     def setUp(self):
