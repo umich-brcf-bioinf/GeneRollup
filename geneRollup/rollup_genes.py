@@ -348,7 +348,7 @@ def _rollup(input_file, output_file):
 
     if _XLSX:
         try:
-            sorted_df.to_excel(output_file, index=True)
+            sorted_df.to_excel(output_file, sheet_name="gene_rollup", index=True)
         except ValueError:
             msg = ("Unable to write [{}] to an Excel file. Review inputs and "
                    "try again.").format(output_file)
