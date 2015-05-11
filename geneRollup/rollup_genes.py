@@ -313,11 +313,6 @@ class dbNSFPFormatRule(object):
         def _determine_format(cell_value):
             if len(str(cell_value)) > 0:
                 normalized = 100*(cell_value-min_value)/(max_value-min_value)
-#                 split_value = str(float(normalized)).split(".")
-# 
-#                 if len(split_value[1]) > 1:
-#                     return "%.3f" % normalized
-#                 else:
                 return str(int(normalized))
             else:
                 return ""
