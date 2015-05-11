@@ -553,8 +553,29 @@ NULL1||'''
 
 
 class dbNSFPFormatRuleTestCase(unittest.TestCase):
-    #TODO: (jebene) edit to account for decimals
-    def xtest_format_standalone(self):
+    def test_format_style(self):
+        input_string =\
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
+GENE1\t\t
+GENE2\t53\t1
+GENE3\t94\t1'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.dbNSFPFormatRule()
+        actual_df = rule.format(data_df)
+
+        expected_index = ["GENE1", "GENE2", "GENE3"]
+        self.assertEquals(expected_index, list(actual_df.index))
+
+        expected_patient_cells = ["",
+                                  {"font_size": "12", "bg_color": "#fff", "font_color": "#000000"},
+                                  {"font_size": "12", "bg_color": "#ffa500", "font_color": "#000000"}]
+        self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
+
+        expected_rank_cells = ["", "", ""]
+        self.assertEquals(expected_rank_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
+
+    def test_format_standalone(self):
         input_string =\
 '''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
 GENE1\t3\t1
@@ -581,7 +602,7 @@ GENE5\t\t
 GENE6\t\t'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
-        expected_df["PATIENT_A"] = ["0.645", "32.903", "59.355", "100", "20", "0"]
+        expected_df["PATIENT_A"] = ["0", "32", "59", "100", "20", "0"]
 
         expected_df.fillna("", inplace=True)
         expected_df = expected_df.applymap(str)
@@ -589,43 +610,42 @@ GENE6\t\t'''
         self.assertEquals(list([list(i) for i in expected_df.values]),
                           list([list(i) for i in actual_df.values]))
 
-#TODO: (jebene) once colour is installed, make these tests pass
-    def xtest_style_lightest(self):
-        cell_value = "0"
+    def test_style_lightest(self):
+        cell_value = 0
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#FFFFFF",
+                          "bg_color": "#fff",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
 
-    def xtest_style_lighter(self):
+    def test_style_lighter(self):
         cell_value = "12"
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#FFB870",
+                          "bg_color": "#f2eeee",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
 
-    def xtest_style_darker(self):
-        cell_value = "12"
+    def test_style_darker(self):
+        cell_value = "78"
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#FFB870",
+                          "bg_color": "#e99c4e",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
 
-    def xtest_style_darkest(self):
-        cell_value = "12"
+    def test_style_darkest(self):
+        cell_value = "100"
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#FFB870",
+                          "bg_color": "#ffa500",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)

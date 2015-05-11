@@ -4,7 +4,10 @@ from collections import OrderedDict
 import re
 import sys
 
+from colour import Color
+
 import pandas as pd
+
 
 _SAMPLENAME_REGEX = ""
 _GENE_SYMBOL = ""
@@ -20,7 +23,7 @@ _REQUIRED_COLUMNS = set(["dbNSFP_rollup_damaging",
 _GENE_SYMBOL_OUTPUT_NAME = "gene symbol"
 
 class dbNSFP(object):
-    #pylint: disable=invalid-name
+    #pylint: disable=invalid-name, too-few-public-methods
     def __init__(self, format_rule):
         self.name = "dbNSFP"
         self.column_label = "damaging votes"
@@ -94,13 +97,13 @@ class dbNSFP(object):
 
 
 class SnpEff(object):
+    #pylint: disable=invalid-name, too-few-public-methods
     _RANK_SCORES =  {"HIGH": 100000.0,
                      "MODERATE": 1,
                      "LOW": 1/100000.0,
                      "MODIFIER": 1/10**12}
     _RANK_ABBREVS =  {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
-    #pylint: disable=invalid-name
     def __init__(self, format_rule):
         self.name = "SnpEff"
         self.column_label = "impact"
@@ -262,6 +265,7 @@ class SummaryColumns(object):
 
 
 class SnpEffFormatRule(object):
+    #pylint: disable=too-few-public-methods
     _COLOR_MAP = {"h": "#003366",
                   "m": "#6699FF",
                   "l": "#CCCCFF",
@@ -297,44 +301,56 @@ class SnpEffFormatRule(object):
 
 
 class dbNSFPFormatRule(object):
-    #from colour import Color
-#     _RANGE_RULE = list(white.range_to(orange, 100))
-    _RANGE_RULE = range(0,100)
+    #pylint: disable=invalid-name,too-few-public-methods
+
+    _RANGE_RULE = list(Color("white").range_to(Color("orange"), 101))
     _FONT_COLOR = "#000000"
+
+    def __init__(self):
+        self.rank_column = "dbNSFP|overall damaging rank"
 
     def format(self, data_df):
         def _determine_format(cell_value):
-            normalized_value = 100*(cell_value-min_value)/(max_value-min_value)
-            split_value = str(normalized_value).split(".")
-
-            if len(split_value) > 1:
-                return "%.3f" % normalized_value
+            if len(str(cell_value)) > 0:
+                normalized = 100*(cell_value-min_value)/(max_value-min_value)
+#                 split_value = str(float(normalized)).split(".")
+# 
+#                 if len(split_value[1]) > 1:
+#                     return "%.3f" % normalized
+#                 else:
+                return str(int(normalized))
             else:
-#                 print normalized_value
-                return str(int(normalized_value))
+                return ""
 
-        #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant - pass in?
-        format_df =  data_df.drop("dbNSFP|overall damaging rank", 1)
+        #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant -pass in?
+        format_df =  data_df.drop(self.rank_column, 1)
 
-        format_df = format_df.applymap(int)
+        min_value = int(min(format_df.min(skipna=True)))
+        max_value = int(max(format_df.max(skipna=True)))
 
-        min_value = int(min(format_df.min()))
-        max_value = int(max(format_df.max()))
-#         print max_value
+        format_df.fillna("", inplace=True)
         format_df = format_df.applymap(_determine_format)
 
-        format_df["dbNSFP|overall damaging rank"] = pd.Series()
+        format_df[self.rank_column] = pd.Series()
         format_df.fillna("", inplace=True)
+
+        for column, dummy in format_df.iteritems():
+            for row, dummy in format_df.iterrows():
+                styled_cell = self._style(format_df.ix[row, column])
+                format_df.ix[row, column] = styled_cell
 
         return format_df
 
     @staticmethod
     def _style(cell_value):
-        cell_value = int(cell_value)
-        styled_cell = {"font_size": "12",
-                       "bg_color": dbNSFPFormatRule._RANGE_RULE[cell_value],
-                       "font_color": dbNSFPFormatRule._FONT_COLOR}
-        return styled_cell
+        if len(str(cell_value)) > 0:
+            cell_value = int(cell_value)
+            color = dbNSFPFormatRule._RANGE_RULE[cell_value]
+            styled_cell = {"font_size": "12",
+                           "bg_color": color.hex,
+                           "font_color": dbNSFPFormatRule._FONT_COLOR}
+            return styled_cell
+        return ""
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -373,6 +389,7 @@ def _combine_dfs(dfs):
     return combined_df
 
 def _translate_to_excel(data_df, style_df, writer):
+#TODO: (jebene): change colors to work in excel
     worksheet_name = "gene_rollup"
     data_df.to_excel(writer, sheet_name=worksheet_name, index=False)
 
@@ -397,7 +414,10 @@ def _rollup(input_file, output_file):
 
     initial_df = _create_df(input_file)
 
-    annotations = [SummaryColumns(), dbNSFP(dbNSFPFormatRule()), SnpEff(SnpEffFormatRule())]
+    annotations = [SummaryColumns(),
+                   dbNSFP(dbNSFPFormatRule()),
+                   SnpEff(SnpEffFormatRule())]
+
     annotation_dfs = OrderedDict()
     style_dfs = OrderedDict()
 
@@ -418,9 +438,7 @@ def _rollup(input_file, output_file):
         try:
             writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
             _translate_to_excel(sorted_df, combined_style_df, writer)
-#             sorted_df.to_excel(output_file,
-#                                sheet_name="gene_rollup",
-#                                index=False)
+
         except ValueError:
             msg = ("Unable to write [{}] to an Excel file. Review inputs and "
                    "try again.").format(output_file)
