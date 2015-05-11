@@ -40,7 +40,7 @@ class dbNSFP(object):
         return data_df, style_df
 
     def _remove_unnecessary_columns(self, initial_df):
-        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
         required_columns = list(sample_cols.columns)
         required_columns.extend([_GENE_SYMBOL, self.damaging_column])
 
@@ -53,7 +53,7 @@ class dbNSFP(object):
 
     def _calculate_rank(self, initial_df):
         #pylint: disable=line-too-long
-        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         initial_df = initial_df.applymap(str)
 
         #set sample columns equal to damaging column value
@@ -67,7 +67,7 @@ class dbNSFP(object):
                                     self.column_label,
                                     samp_suffix])
             initial_df[sample] = initial_df[sample].apply(lambda x: x if x != "." else 0)
-            initial_df[sample_name] = initial_df[sample].apply(float)
+            initial_df[sample_name] = initial_df[sample].apply(int)
 
             del initial_df[sample]
 
@@ -78,6 +78,7 @@ class dbNSFP(object):
 
         ranked_df = ranked_df.sort(self.damaging_rank_column, ascending=0)
         ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].rank(ascending=0, method="min")
+        ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].apply(int)
 
         return ranked_df
 
@@ -98,11 +99,11 @@ class dbNSFP(object):
 
 class SnpEff(object):
     #pylint: disable=invalid-name, too-few-public-methods
-    _RANK_SCORES =  {"HIGH": 100000.0,
-                     "MODERATE": 1,
-                     "LOW": 1/100000.0,
-                     "MODIFIER": 1/10**12}
-    _RANK_ABBREVS =  {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
+    _RANK_SCORES = {"HIGH": 100000.0,
+                    "MODERATE": 1,
+                    "LOW": 1/100000.0,
+                    "MODIFIER": 1/10**12}
+    _RANK_ABBREVS = {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
     def __init__(self, format_rule):
         self.name = "SnpEff"
@@ -124,7 +125,7 @@ class SnpEff(object):
         return data_df, style_df
 
     def _remove_unnecessary_columns(self, initial_df):
-        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
         required_columns = list(sample_cols.columns)
         required_columns.extend([_GENE_SYMBOL, self.impact_column])
 
@@ -137,7 +138,7 @@ class SnpEff(object):
 
     def _calculate_score(self, initial_df):
     #pylint: disable=line-too-long
-        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         initial_df = initial_df.applymap(str)
 
         scored_df = pd.DataFrame()
@@ -154,6 +155,7 @@ class SnpEff(object):
         scored_df.fillna(0, inplace=True)
 
         score = scored_df.groupby(_GENE_SYMBOL).sum().apply(sum, 1)
+        score = score.apply(int)
         grouped_df = initial_df.groupby(_GENE_SYMBOL).sum()
         grouped_df = grouped_df[grouped_df.index != "."]
         grouped_df = grouped_df.applymap(lambda x: "".join(sorted(x)))
@@ -168,7 +170,7 @@ class SnpEff(object):
     def _get_impact_category_counts(self, initial_df):
         #pylint: disable=line-too-long
         def _count_category(abbrev):
-            sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+            sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
             temp_df = pd.DataFrame()
             for sample_col in sample_cols:
                 temp_df[sample_col] = initial_df[sample_col].apply(lambda x: len([i for i in x if i == abbrev]))
@@ -183,7 +185,7 @@ class SnpEff(object):
         return category_df
 
     def _rename_sample_columns(self, initial_df):
-        sample_cols =  initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
         for sample in sample_cols:
             split_sample = sample.split("|")
             samp_suffix = "|".join(split_sample[1:])
@@ -199,6 +201,7 @@ class SnpEff(object):
         #pylint: disable=line-too-long
         category_df = initial_df.sort(self.impact_score_column, ascending=0)
         category_df[self.impact_rank_column] = category_df[self.impact_score_column].rank(ascending=0, method="min")
+        category_df[self.impact_rank_column] = category_df[self.impact_rank_column].apply(int)
 
         return self._rename_sample_columns(category_df)
 
@@ -230,7 +233,7 @@ class SummaryColumns(object):
         self.name = "Summary Columns"
 
     def summarize(self, initial_df):
-        sample_df =  initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_df = initial_df.filter(regex=_SAMPLENAME_REGEX)
         sample_df[_GENE_SYMBOL] = initial_df[_GENE_SYMBOL]
 
         data_df = pd.DataFrame()
@@ -254,7 +257,7 @@ class SummaryColumns(object):
 
     @staticmethod
     def calculate_total_loci(sample_df):
-        return sample_df.groupby(_GENE_SYMBOL).count().ix[:,0]
+        return sample_df.groupby(_GENE_SYMBOL).count().ix[:, 0]
 
     @staticmethod
     def calculate_total_mutations(sample_df):
@@ -317,7 +320,7 @@ class dbNSFPFormatRule(object):
                 return ""
 
         #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant -pass in?
-        format_df =  data_df.drop(self.rank_column, 1)
+        format_df = data_df.drop(self.rank_column, 1)
 
         min_value = int(min(format_df.min(skipna=True)))
         max_value = int(max(format_df.max(skipna=True)))
@@ -354,7 +357,7 @@ class RankFormatRule(object):
     _FONT_COLOR = "#000000"
 
     def __init__(self):
-        #TODO: (jebene) modify regex storage so that annotations and formt rule refer to same format
+        #TODO: (jebene) modify regex storage so that annotations and format rule refer to same format
         self.rank_regex = r".*\|overall .* rank"
 
     def format(self, data_df):
@@ -423,14 +426,13 @@ def _combine_dfs(dfs):
     combined_df = summary_df.join(dbnsfp_df, how='outer')
     combined_df = combined_df.join(snpeff_df, how='outer')
     combined_df = combined_df.fillna("")
-    combined_df.index.names=[_GENE_SYMBOL_OUTPUT_NAME]
+    combined_df.index.names = [_GENE_SYMBOL_OUTPUT_NAME]
 
     combined_df = combined_df[combined_df.index != "."]
 
     return combined_df
 
 def _translate_to_excel(data_df, style_df, writer):
-#TODO: (jebene): change colors to work in excel
     worksheet_name = "gene_rollup"
     data_df.to_excel(writer, sheet_name=worksheet_name, index=False)
 
@@ -448,7 +450,10 @@ def _translate_to_excel(data_df, style_df, writer):
     writer.save()
 
 def _sort_by_dbnsfp_rank(initial_df):
-    return initial_df.sort(dbNSFP("").damaging_rank_column)
+    sorted_df = initial_df.sort(columns = [dbNSFP("").damaging_rank_column,
+                                           SnpEff("").impact_rank_column,
+                                           _GENE_SYMBOL_OUTPUT_NAME])
+    return sorted_df
 
 def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
