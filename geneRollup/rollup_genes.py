@@ -388,7 +388,7 @@ class RankFormatRule(object):
             cell_value = int(cell_value)
             color = RankFormatRule._RANGE_RULE[cell_value]
             styled_cell = {"font_size": "12",
-                           "bg_color": color.hex,
+                           "bg_color": str(color),
                            "font_color": RankFormatRule._FONT_COLOR}
             return styled_cell
         return ""

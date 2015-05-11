@@ -111,42 +111,42 @@ CREBBP\thhh\t.\t1'''
         self.assertEquals(["CREBBP", "BRCA1", "EGFR"], list(sorted_df.index.values))
 
     def test_translate_to_excel(self):
-        with TempDirectory() as output_dir:
-            output_dir.write("output.xlsx", "")
-            output_file = os.path.join(output_dir.path, "output.xlsx")
+#         with TempDirectory() as output_dir:
+#             output_dir.write("output.xlsx", "")
+#             output_file = os.path.join(output_dir.path, "output.xlsx")
+        output_file = "C:/Users/jebene/Desktop/test_output.xlsx"
+        data_string =\
+'''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
+MOD|mml|12|2
+NULL1|||
+HIGH|hhmlx|4|1'''
+        data_df = dataframe(data_string)
+        data_df.fillna("", inplace=True)
 
-            data_string =\
-    '''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
-    MOD|mml|12|2
-    NULL1|||
-    HIGH|hhmlx|4|1'''
-            data_df = dataframe(data_string)
-            data_df.fillna("", inplace=True)
+        style_string = \
+'''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
+MOD|||
+HIGH|||
+NULL1|||'''
 
-            style_string = \
-    '''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
-    MOD|||
-    HIGH|||
-    NULL1|||'''
+        style_df = dataframe(style_string)
+        style_df["PATIENT_A_SnpEff"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+                                        "",
+                                        {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
+        style_df["PATIENT_A_dbNSFP"] = [{"font_size": "12", "bg_color": "#ffa500", "font_color": "#6699FF"},
+                                        "",
+                                        {"font_size": "12", "bg_color": "white", "font_color": "#003366"}]
+        style_df.fillna("", inplace=True)
 
-            style_df = dataframe(style_string)
-            style_df["PATIENT_A_SnpEff"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
-                                            "",
-                                            {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
-            style_df["PATIENT_A_dbNSFP"] = [{"font_size": "12", "bg_color": "#ffa500", "font_color": "#6699FF"},
-                                            "",
-                                            {"font_size": "12", "bg_color": "#fff", "font_color": "#003366"}]
-            style_df.fillna("", inplace=True)
+        writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
+        rollup_genes._translate_to_excel(data_df, style_df, writer)
 
-            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
-            rollup_genes._translate_to_excel(data_df, style_df, writer)
-
-            script_dir = os.path.dirname(os.path.realpath(__file__))
-            expected_output = os.path.join(script_dir,
-                                           "functional_tests",
-                                           "translate_to_excel",
-                                           "expected_output.xlsx")
-            self.assertTrue(filecmp.dircmp(expected_output, output_file))
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        expected_output = os.path.join(script_dir,
+                                       "functional_tests",
+                                       "translate_to_excel",
+                                       "expected_output.xlsx")
+        self.assertTrue(filecmp.dircmp(expected_output, output_file))
 
 
 class dbNSFPTestCase(unittest.TestCase):
@@ -672,9 +672,9 @@ GENE3\t6'''
         expected_index = ["GENE1", "GENE2", "GENE3"]
         self.assertEquals(expected_index, list(actual_df.index))
 
-        expected_patient_cells = [{"font_size": "12", "bg_color": "#f00", "font_color": "#000000"},
+        expected_patient_cells = [{"font_size": "12", "bg_color": "red", "font_color": "#000000"},
                                   "",
-                                  {"font_size": "12", "bg_color": "#fff", "font_color": "#000000"}]
+                                  {"font_size": "12", "bg_color": "white", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
 
     def test_format_standalone(self):
@@ -764,7 +764,7 @@ GENE3\t31\t100'''
         rule = rollup_genes.RankFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#fff",
+                          "bg_color": "white",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
