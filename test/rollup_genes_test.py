@@ -111,27 +111,31 @@ CREBBP\thhh\t.\t1'''
         self.assertEquals(["CREBBP", "BRCA1", "EGFR"], list(sorted_df.index.values))
 
     def test_translate_to_excel(self):
-        #pylint: disable=no-self-use
         with TempDirectory() as output_dir:
             output_dir.write("output.xlsx", "")
             output_file = os.path.join(output_dir.path, "output.xlsx")
+
             data_string =\
-'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
-MOD|mml|2
-NULL1||
-HIGH|hhmlx|1'''
+    '''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
+    MOD|mml|12|2
+    NULL1|||
+    HIGH|hhmlx|4|1'''
             data_df = dataframe(data_string)
             data_df.fillna("", inplace=True)
 
             style_string = \
-'''gene symbol|PATIENT_A|SnpEff_overall_impact_rank
-MOD||
-HIGH||
-NULL1||'''
+    '''gene symbol|PATIENT_A_SnpEff|PATIENT_A_dbNSFP|SnpEff_overall_impact_rank
+    MOD|||
+    HIGH|||
+    NULL1|||'''
+
             style_df = dataframe(style_string)
-            style_df["PATIENT_A"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
-                                     "",
-                                     {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
+            style_df["PATIENT_A_SnpEff"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+                                            "",
+                                            {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
+            style_df["PATIENT_A_dbNSFP"] = [{"font_size": "12", "bg_color": "#ffa500", "font_color": "#6699FF"},
+                                            "",
+                                            {"font_size": "12", "bg_color": "#fff", "font_color": "#003366"}]
             style_df.fillna("", inplace=True)
 
             writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
@@ -142,7 +146,8 @@ NULL1||'''
                                            "functional_tests",
                                            "translate_to_excel",
                                            "expected_output.xlsx")
-            filecmp.cmp(expected_output, output_file)
+            self.assertTrue(filecmp.dircmp(expected_output, output_file))
+
 
 class dbNSFPTestCase(unittest.TestCase):
     def setUp(self):
