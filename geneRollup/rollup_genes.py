@@ -238,7 +238,6 @@ class SummaryColumns(object):
         data_df[_LOCI_COUNT] = self.calculate_total_loci(sample_df)
         data_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
 
-#TODO: (jebene) add format/style df
         style_df = data_df.copy()
         style_df = style_df.applymap(lambda x: "")
 
@@ -344,6 +343,53 @@ class dbNSFPFormatRule(object):
             styled_cell = {"font_size": "12",
                            "bg_color": color.hex,
                            "font_color": dbNSFPFormatRule._FONT_COLOR}
+            return styled_cell
+        return ""
+
+
+#TODO: (jebene) hookup rankformatrule
+class RankFormatRule(object):
+    #pylint: disable=invalid-name, too-few-public-methods
+    _RANGE_RULE = list(Color("red").range_to(Color("white"), 101))
+    _FONT_COLOR = "#000000"
+
+    def __init__(self):
+        #TODO: (jebene) modify regex storage so that annotations and formt rule refer to same format
+        self.rank_regex = r".*\|overall .* rank"
+
+    def format(self, data_df):
+        def _determine_format(cell_value):
+            if len(str(cell_value)) > 0:
+                normalized = 100*(cell_value-min_value)/(max_value-min_value)
+                return str(int(normalized))
+            else:
+                return ""
+
+        for col in data_df.columns.values:
+            if re.search(self.rank_regex, col):
+                min_value = int(data_df[col].min(skipna=True))
+                max_value = int(data_df[col].max(skipna=True))
+
+                data_df.fillna("", inplace=True)
+                data_df[col] = data_df[col].apply(_determine_format)
+            else:
+                data_df[col] = data_df[col].apply(lambda x: "")
+
+        for column, dummy in data_df.iteritems():
+            for row, dummy in data_df.iterrows():
+                styled_cell = self._style(data_df.ix[row, column])
+                data_df.ix[row, column] = styled_cell
+
+        return data_df
+
+    @staticmethod
+    def _style(cell_value):
+        if len(str(cell_value)) > 0:
+            cell_value = int(cell_value)
+            color = RankFormatRule._RANGE_RULE[cell_value]
+            styled_cell = {"font_size": "12",
+                           "bg_color": color.hex,
+                           "font_color": RankFormatRule._FONT_COLOR}
             return styled_cell
         return ""
 

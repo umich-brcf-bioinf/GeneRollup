@@ -372,6 +372,7 @@ CREBBP\tm\t.\t1\t2'''
         self.assertEquals(["SnpEff|overall impact rank", "SnpEff|overall impact score", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
                             list(rearranged_df.columns.values))
 
+
 class SummaryColumnsTestCase(unittest.TestCase):
     def setUp(self):
         rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
@@ -654,6 +655,150 @@ GENE6\t\t'''
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
+
+
+class RankFormatRuleTestCase(unittest.TestCase):
+    def test_format_style(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP|overall damaging rank
+GENE1\t1
+GENE2\t
+GENE3\t6'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.RankFormatRule()
+        actual_df = rule.format(data_df)
+
+        expected_index = ["GENE1", "GENE2", "GENE3"]
+        self.assertEquals(expected_index, list(actual_df.index))
+
+        expected_patient_cells = [{"font_size": "12", "bg_color": "#f00", "font_color": "#000000"},
+                                  "",
+                                  {"font_size": "12", "bg_color": "#fff", "font_color": "#000000"}]
+        self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
+
+    def test_format_standalone(self):
+        input_string =\
+'''GENE_SYMBOL\tSnpEff|overall impact rank
+GENE1\t3
+GENE2\t157
+GENE3\t52'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.RankFormatRule()
+        rule._style = lambda x: x
+
+        actual_df = rule.format(data_df)
+
+        expected_string = \
+'''GENE_SYMBOL\tSnpEff|overall impact rank
+GENE1\t0
+GENE2\t100
+GENE3\t31'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals(list([list(i) for i in expected_df.values]),
+                          list([list(i) for i in actual_df.values]))
+
+    def test_format_rankColumnOnly(self):
+        input_string =\
+'''GENE_SYMBOL\tSnpEff|overall impact rank\tfoo
+GENE1\t3\t1
+GENE2\t157\t1
+GENE3\t52\t1'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.RankFormatRule()
+        rule._style = lambda x: x
+
+        actual_df = rule.format(data_df)
+
+        expected_string = \
+'''GENE_SYMBOL\tSnpEff|overall impact rank\tfoo
+GENE1\t0\t
+GENE2\t100\t
+GENE3\t31\t'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals(list([list(i) for i in expected_df.values]),
+                          list([list(i) for i in actual_df.values]))
+
+    def test_format_multipleRankColumns(self):
+        input_string =\
+'''GENE_SYMBOL\tSnpEff|overall impact rank\tdbNSFP|overall damaging rank
+GENE1\t3\t1
+GENE2\t157\t58
+GENE3\t52\t93'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.RankFormatRule()
+        rule._style = lambda x: x
+
+        actual_df = rule.format(data_df)
+
+        expected_string = \
+'''GENE_SYMBOL\tSnpEff|overall impact rank\tdbNSFP|overall damaging rank
+GENE1\t0\t0
+GENE2\t100\t61
+GENE3\t31\t100'''
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals(list([list(i) for i in expected_df.values]),
+                          list([list(i) for i in actual_df.values]))
+
+
+    def test_style_lightest(self):
+        cell_value = "100"
+        rule = rollup_genes.RankFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#fff",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def test_style_lighter(self):
+        cell_value = "78"
+        rule = rollup_genes.RankFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#e9dddd",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def test_style_darker(self):
+        cell_value = "12"
+        rule = rollup_genes.RankFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#f22c2c",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
+    def test_style_darkest(self):
+        cell_value = "1"
+        rule = rollup_genes.RankFormatRule()
+        actual_style = rule._style(cell_value)
+        expected_style = {"font_size": "12",
+                          "bg_color": "#fe0404",
+                          "font_color": "#000000"}
+
+        self.assertEquals(expected_style, actual_style)
+
 
 class GeneRollupFunctionalTestCase(unittest.TestCase):
     def setUp(self):
