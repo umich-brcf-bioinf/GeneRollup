@@ -111,7 +111,6 @@ CREBBP\thhh\t6\t1'''
         self.assertEquals(["BRCA2", "SON", "CREBBP", "BRCA1", "EGFR"], list(sorted_df["gene symbol"].values))
         self.assertEquals([1, 1, 1, 2, 3], list(sorted_df["dbNSFP|overall damaging rank"].values))
 
-
     def test_translate_to_excel(self):
         with TempDirectory() as output_dir:
             output_dir.write("output.xlsx", "")
@@ -343,7 +342,7 @@ CREBBP\tm\t.\t1'''
         ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals([1, 2], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["1", "2"], list(ranked_df["SnpEff|overall impact rank"].values))
 
     def test_calculate_rank_tie(self):
         input_string =\
@@ -357,7 +356,7 @@ CREBBP\tm\t.\t1'''
         ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals([1, 1], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["1", "1"], list(ranked_df["SnpEff|overall impact rank"].values))
 
     def test_change_col_order(self):
         input_string =\
@@ -382,7 +381,7 @@ class SummaryColumnsTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def xtest_summarize(self):
+    def test_summarize(self):
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
 BRCA1\t1\t1
@@ -390,7 +389,7 @@ BRCA1\t.\t1
 CREBBP\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         SummaryColumns = rollup_genes.SummaryColumns()
-        dummy, summarized_df = SummaryColumns.summarize(input_df)
+        data_df, style_df = SummaryColumns.summarize(input_df)
 
         expected_string =\
 '''GENE_SYMBOL\ttotal impacted samples\tdistinct loci\ttotal mutations
@@ -398,8 +397,10 @@ BRCA1\t2\t2\t3
 CREBBP\t1\t1\t1'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df = expected_df.applymap(str)
 
-        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in summarized_df.values])
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
+        self.assertEquals([["", "", ""], ["", "", ""]], [list(i) for i in style_df.values])
 
     def test_calculate_total_samples(self):
         input_string =\

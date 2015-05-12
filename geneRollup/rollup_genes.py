@@ -164,6 +164,7 @@ class SnpEff(object):
             del grouped_df[self.impact_column]
 
         grouped_df[self.impact_score_column] = score
+        grouped_df = grouped_df.applymap(str)
 
         return grouped_df
 
@@ -202,6 +203,7 @@ class SnpEff(object):
         category_df = initial_df.sort(self.impact_score_column, ascending=0)
         category_df[self.impact_rank_column] = category_df[self.impact_score_column].rank(ascending=0, method="min")
         category_df[self.impact_rank_column] = category_df[self.impact_rank_column].apply(int)
+        category_df = category_df.applymap(str)
 
         return self._rename_sample_columns(category_df)
 
@@ -240,6 +242,7 @@ class SummaryColumns(object):
         data_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
         data_df[_LOCI_COUNT] = self.calculate_total_loci(sample_df)
         data_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
+        data_df = data_df.applymap(str)
 
         style_df = data_df.copy()
         style_df = style_df.applymap(lambda x: "")
@@ -476,6 +479,8 @@ def _rollup(input_file, output_file):
     combined_df = _combine_dfs(annotation_dfs)
     combined_df = combined_df.reset_index()
     sorted_df = _sort_by_dbnsfp_rank(combined_df)
+
+#     sorted_df = sorted_df.applymap(type)
 
     combined_style_df = _combine_dfs(style_dfs)
     combined_style_df = combined_style_df.reset_index()
