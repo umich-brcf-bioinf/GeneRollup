@@ -24,20 +24,23 @@ _GENE_SYMBOL_OUTPUT_NAME = "gene symbol"
 
 class dbNSFP(object):
     #pylint: disable=invalid-name, too-few-public-methods
-    def __init__(self, format_rule):
+    def __init__(self, format_rules):
         self.name = "dbNSFP"
         self.column_label = "damaging votes"
         self.damaging_column = "dbNSFP_rollup_damaging"
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
-        self.format_rule = format_rule
+        self.format_rules = format_rules
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
         ranked_df = self._calculate_rank(condensed_df)
         data_df = self._change_col_order(ranked_df)
-        style_df = self.format_rule.format(data_df)
 
-        return data_df, style_df
+        style_dfs = []
+        for format_rule in self.format_rules:
+            style_dfs.append(format_rule.format(data_df))
+
+        return data_df, style_dfs
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -105,14 +108,14 @@ class SnpEff(object):
                     "MODIFIER": 1/10**12}
     _RANK_ABBREVS = {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
-    def __init__(self, format_rule):
+    def __init__(self, format_rules):
         self.name = "SnpEff"
         self.column_label = "impact"
         self.impact_column = "SNPEFF_TOP_EFFECT_IMPACT"
         self.impact_rank_column = "SnpEff|overall impact rank"
         self.impact_score_column = "SnpEff|overall impact score"
         self.impact_category = "SnpEff|impact category|{}"
-        self.format_rule = format_rule
+        self.format_rules = format_rules
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
@@ -120,9 +123,12 @@ class SnpEff(object):
         category_df = self._get_impact_category_counts(scored_df)
         ranked_df = self._calculate_rank(category_df)
         data_df = self._change_col_order(ranked_df)
-        style_df = self.format_rule.format(data_df)
 
-        return data_df, style_df
+        style_dfs = []
+        for format_rule in self.format_rules:
+            style_dfs.append(format_rule.format(data_df))
+
+        return data_df, style_dfs
 
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
@@ -244,10 +250,11 @@ class SummaryColumns(object):
         data_df[_MUTATION_COUNT] = self.calculate_total_mutations(sample_df)
         data_df = data_df.applymap(str)
 
+        style_dfs = []
         style_df = data_df.copy()
-        style_df = style_df.applymap(lambda x: "")
+        style_dfs.append(style_df.applymap(lambda x: ""))
 
-        return data_df, style_df
+        return data_df, style_dfs
 
     @staticmethod
     def calculate_total_samples(sample_df):
@@ -283,8 +290,8 @@ class SnpEffFormatRule(object):
                     return letter
             return ""
 
-        data_df = data_df.applymap(str)
-        format_df = data_df.applymap(_determine_format)
+        format_df = data_df.applymap(str)
+        format_df = format_df.applymap(_determine_format)
 
         for column, dummy in format_df.iteritems():
             for row, dummy in format_df.iterrows():
@@ -347,7 +354,7 @@ class dbNSFPFormatRule(object):
             cell_value = int(cell_value)
             color = dbNSFPFormatRule._RANGE_RULE[cell_value]
             styled_cell = {"font_size": "12",
-                           "bg_color": color.hex,
+                           "bg_color": str(color),
                            "font_color": dbNSFPFormatRule._FONT_COLOR}
             return styled_cell
         return ""
@@ -371,22 +378,23 @@ class RankFormatRule(object):
             else:
                 return ""
 
-        for col in data_df.columns.values:
+        format_df = data_df.copy()
+        for col in format_df.columns.values:
             if re.search(self.rank_regex, col):
-                min_value = int(data_df[col].min(skipna=True))
-                max_value = int(data_df[col].max(skipna=True))
+                min_value = int(format_df[col].min(skipna=True))
+                max_value = int(format_df[col].max(skipna=True))
 
-                data_df.fillna("", inplace=True)
-                data_df[col] = data_df[col].apply(_determine_format)
+                format_df.fillna("", inplace=True)
+                format_df[col] = format_df[col].apply(_determine_format)
             else:
-                data_df[col] = data_df[col].apply(lambda x: "")
+                format_df[col] = format_df[col].apply(lambda x: "")
 
-        for column, dummy in data_df.iteritems():
-            for row, dummy in data_df.iterrows():
-                styled_cell = self._style(data_df.ix[row, column])
-                data_df.ix[row, column] = styled_cell
+        for column, dummy in format_df.iteritems():
+            for row, dummy in format_df.iterrows():
+                styled_cell = self._style(format_df.ix[row, column])
+                format_df.ix[row, column] = styled_cell
 
-        return data_df
+        return format_df
 
     @staticmethod
     def _style(cell_value):
@@ -423,6 +431,13 @@ def _validate_df(initial_df):
             break
     if not sample_column:
         raise BaseException(msg)
+
+#TODO: (jebene) - edit this so that only columns with data are joined
+def _combine_style_dfs(dfs):
+    df1, df2 = dfs
+    combined_df = df1.join(df2, how='outer')
+    combined_df = combined_df.fillna("")
+    return combined_df
 
 def _combine_dfs(dfs):
     summary_df, dbnsfp_df, snpeff_df = dfs.values()
@@ -462,27 +477,29 @@ def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
 
     initial_df = _create_df(input_file)
-
+#TODO: (jebene) add RankFormatRule() to dbNSFP and SnpEff -- it's reusing data_df in summarize() I think, so look into that
     annotations = [SummaryColumns(),
-                   dbNSFP(dbNSFPFormatRule()),
-                   SnpEff(SnpEffFormatRule())]
+                   dbNSFP([dbNSFPFormatRule()]),
+                   SnpEff([SnpEffFormatRule()])]
 
     annotation_dfs = OrderedDict()
-    style_dfs = OrderedDict()
+    all_style_dfs = OrderedDict()
 
     for annotation in annotations:
         print "Generating {} rollup information".format(annotation.name)
-        summarized_df, style_df = annotation.summarize(initial_df)
+        summarized_df, style_dfs = annotation.summarize(initial_df)
         annotation_dfs[annotation.name] = summarized_df
-        style_dfs[annotation.name] = style_df
+        if len(style_dfs) == 2:
+            combined_style_df = _combine_style_dfs(style_dfs)
+            all_style_dfs[annotation.name] = combined_style_df
+        elif len(style_dfs) == 1:
+            all_style_dfs[annotation.name] = style_dfs[0]
 
     combined_df = _combine_dfs(annotation_dfs)
     combined_df = combined_df.reset_index()
     sorted_df = _sort_by_dbnsfp_rank(combined_df)
 
-#     sorted_df = sorted_df.applymap(type)
-
-    combined_style_df = _combine_dfs(style_dfs)
+    combined_style_df = _combine_dfs(all_style_dfs)
     combined_style_df = combined_style_df.reset_index()
 
     if _XLSX:

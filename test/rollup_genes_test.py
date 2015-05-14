@@ -133,9 +133,12 @@ CREBBP\thhh\t6\t1'''
             style_df["PATIENT_A_SnpEff"] = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
                                             "",
                                             {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"}]
-            style_df["PATIENT_A_dbNSFP"] = [{"font_size": "12", "bg_color": "#ffa500", "font_color": "#6699FF"},
+            style_df["PATIENT_A_dbNSFP"] = [{"font_size": "12", "bg_color": "#ffa500", "font_color": "#000000"},
                                             "",
                                             {"font_size": "12", "bg_color": "white", "font_color": "#003366"}]
+            style_df["SnpEff_overall_impact_rank"] = [{"font_size": "12", "bg_color": "white", "font_color": "#000000"},
+                                                      "",
+                                                      {"font_size": "12", "bg_color": "red", "font_color": "#000000"}]
             style_df.fillna("", inplace=True)
 
             writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
@@ -160,7 +163,7 @@ class dbNSFPTestCase(unittest.TestCase):
     def test_summarize_dataMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 3] * 2)
         formatRule = MockFormatRule(FORMAT_DF)
-        dbNSFP = rollup_genes.dbNSFP(formatRule)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -169,8 +172,10 @@ BRCA1\t5\t.\t1
 CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         input_df = input_df.applymap(str)
-        (data_df, style_df) = dbNSFP.summarize(input_df)
-        self.assertEquals(data_df.shape, style_df.shape)
+        (data_df, style_dfs) = dbNSFP.summarize(input_df)
+
+        self.assertEquals(1, len(style_dfs))
+        self.assertEquals(data_df.shape, style_dfs[0].shape)
 
         data_df = data_df.applymap(str)
         expected_string =\
@@ -187,7 +192,7 @@ CREBBP\t2\t3\t0'''
     def test_summarize_formatMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 3] * 2)
         formatRule = MockFormatRule(FORMAT_DF)
-        dbNSFP = rollup_genes.dbNSFP(formatRule)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -195,10 +200,33 @@ BRCA1\t2\t1\t1
 BRCA1\t5\t.\t1
 CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        (data_df, format_df) = dbNSFP.summarize(input_df)
+        (data_df, format_dfs) = dbNSFP.summarize(input_df)
 
         self.assertIs(data_df, formatRule.last_data_df)
-        self.assertIs(FORMAT_DF, format_df)
+        self.assertEquals(1, len(format_dfs))
+        self.assertIs(FORMAT_DF, format_dfs[0])
+
+    def test_summarize_multipleFormatRules(self):
+        FORMAT_DF1 = pd.DataFrame([[42] * 3] * 2)
+        formatRule1 = MockFormatRule(FORMAT_DF1)
+
+        FORMAT_DF2 = pd.DataFrame([["A"] * 3] * 2)
+        formatRule2 = MockFormatRule(FORMAT_DF2)
+
+        dbNSFP = rollup_genes.dbNSFP([formatRule1, formatRule2])
+
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\t2\t1\t1
+BRCA1\t5\t.\t1
+CREBBP\t3\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        (data_df, format_dfs) = dbNSFP.summarize(input_df)
+
+        self.assertIs(data_df, formatRule1.last_data_df)
+        self.assertEquals(2, len(format_dfs))
+        self.assertIs(FORMAT_DF1, format_dfs[0])
+        self.assertIs(FORMAT_DF2, format_dfs[1])
 
     def test_calculate_rank(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
@@ -209,7 +237,7 @@ BRCA1\t3\t.\t1
 CREBBP\t2\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         formatRule = MockFormatRule(FORMAT_DF)
-        dbNSFP = rollup_genes.dbNSFP(formatRule)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         ranked_df = dbNSFP._calculate_rank(input_df)
 
@@ -224,7 +252,7 @@ BRCA1\t5\t.\t1
 CREBBP\t5\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         formatRule = MockFormatRule(FORMAT_DF)
-        dbNSFP = rollup_genes.dbNSFP(formatRule)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         ranked_df = dbNSFP._calculate_rank(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
@@ -238,7 +266,7 @@ BRCA1\th\thl\t1
 CREBBP\tm\t.\t2'''
         input_df = dataframe(input_string, sep="\t")
         formatRule = MockFormatRule(FORMAT_DF)
-        dbNSFP = rollup_genes.dbNSFP(formatRule)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         indexed_df = input_df.set_index(["GENE_SYMBOL"])
         rearranged_df = dbNSFP._change_col_order(indexed_df)
@@ -257,7 +285,7 @@ class SnpEffTestCase(unittest.TestCase):
     def test_summarize_dataMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         formatRule = MockFormatRule(FORMAT_DF)
-        snpEff = rollup_genes.SnpEff(formatRule)
+        snpEff = rollup_genes.SnpEff([formatRule])
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -265,8 +293,10 @@ BRCA1\tHIGH\t1\t1
 BRCA1\tLOW\t.\t1
 CREBBP\tHIGH\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        (data_df, style_df) = snpEff.summarize(input_df)
-        self.assertEquals(data_df.shape, style_df.shape)
+        (data_df, style_dfs) = snpEff.summarize(input_df)
+
+        self.assertEquals(1, len(style_dfs))
+        self.assertEquals(data_df.shape, style_dfs[0].shape)
 
         data_df = data_df.applymap(str)
         expected_string =\
@@ -283,7 +313,7 @@ CREBBP\t2\t100000\t1\t0\t0\t0\th\t'''
     def test_summarize_formatMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         formatRule = MockFormatRule(FORMAT_DF)
-        snpEff = rollup_genes.SnpEff(formatRule)
+        snpEff = rollup_genes.SnpEff([formatRule])
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -291,10 +321,33 @@ BRCA1\tHIGH\t1\t1
 BRCA1\tLOW\t.\t1
 CREBBP\tHIGH\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        (data_df, format_df) = snpEff.summarize(input_df)
+        (data_df, format_dfs) = snpEff.summarize(input_df)
 
         self.assertIs(data_df, formatRule.last_data_df)
-        self.assertIs(FORMAT_DF, format_df)
+        self.assertEquals(1, len(format_dfs))
+        self.assertIs(FORMAT_DF, format_dfs[0])
+
+    def test_summarize_multipleFormatRules(self):
+        FORMAT_DF1 = pd.DataFrame([[42] * 8] * 2)
+        formatRule1 = MockFormatRule(FORMAT_DF1)
+
+        FORMAT_DF2 = pd.DataFrame([["A"] * 8] * 2)
+        formatRule2 = MockFormatRule(FORMAT_DF2)
+
+        snpEff = rollup_genes.SnpEff([formatRule1, formatRule2])
+
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+BRCA1\tHIGH\t1\t1
+BRCA1\tLOW\t.\t1
+CREBBP\tHIGH\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        (data_df, format_dfs) = snpEff.summarize(input_df)
+
+        self.assertIs(data_df, formatRule1.last_data_df)
+        self.assertEquals(2, len(format_dfs))
+        self.assertIs(FORMAT_DF1, format_dfs[0])
+        self.assertIs(FORMAT_DF2, format_dfs[1])
 
     def test_calculate_score(self):
         input_string =\
@@ -303,7 +356,7 @@ BRCA1\tLOW\t.\t1
 BRCA1\tHIGH\t1\t1
 CREBBP\tMODERATE\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        SnpEff = rollup_genes.SnpEff(MockFormatRule)
+        SnpEff = rollup_genes.SnpEff([MockFormatRule])
 
         scored_df = SnpEff._calculate_score(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(scored_df.index.values))
@@ -319,7 +372,7 @@ CREBBP\tMODERATE\t0\t.'''
 BRCA1\thh\tl
 CREBBP\tm\t.'''
         input_df = dataframe(input_string, sep="\t")
-        SnpEff = rollup_genes.SnpEff(MockFormatRule)
+        SnpEff = rollup_genes.SnpEff([MockFormatRule])
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         category_df = SnpEff._get_impact_category_counts(grouped_df)
@@ -336,7 +389,7 @@ CREBBP\tm\t.'''
 BRCA1\thh\tl\t200000
 CREBBP\tm\t.\t1'''
         input_df = dataframe(input_string, sep="\t")
-        SnpEff = rollup_genes.SnpEff(MockFormatRule)
+        SnpEff = rollup_genes.SnpEff([MockFormatRule])
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         ranked_df = SnpEff._calculate_rank(grouped_df)
@@ -350,7 +403,7 @@ CREBBP\tm\t.\t1'''
 BRCA1\t.\tm\t1
 CREBBP\tm\t.\t1'''
         input_df = dataframe(input_string, sep="\t")
-        SnpEff = rollup_genes.SnpEff(MockFormatRule)
+        SnpEff = rollup_genes.SnpEff([MockFormatRule])
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         ranked_df = SnpEff._calculate_rank(grouped_df)
@@ -364,7 +417,7 @@ CREBBP\tm\t.\t1'''
 BRCA1\th\thl\t20000\t1
 CREBBP\tm\t.\t1\t2'''
         input_df = dataframe(input_string, sep="\t")
-        SnpEff = rollup_genes.SnpEff(MockFormatRule)
+        SnpEff = rollup_genes.SnpEff([MockFormatRule])
 
         indexed_df = input_df.set_index(["GENE_SYMBOL"])
         rearranged_df = SnpEff._change_col_order(indexed_df)
@@ -389,7 +442,7 @@ BRCA1\t.\t1
 CREBBP\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         SummaryColumns = rollup_genes.SummaryColumns()
-        data_df, style_df = SummaryColumns.summarize(input_df)
+        data_df, style_dfs = SummaryColumns.summarize(input_df)
 
         expected_string =\
 '''GENE_SYMBOL\ttotal impacted samples\tdistinct loci\ttotal mutations
@@ -400,7 +453,8 @@ CREBBP\t1\t1\t1'''
         expected_df = expected_df.applymap(str)
 
         self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
-        self.assertEquals([["", "", ""], ["", "", ""]], [list(i) for i in style_df.values])
+        self.assertEquals(1, len(style_dfs))
+        self.assertEquals([["", "", ""], ["", "", ""]], [list(i) for i in style_dfs[0].values])
 
     def test_calculate_total_samples(self):
         input_string =\
@@ -575,8 +629,8 @@ GENE3\t94\t1'''
         self.assertEquals(expected_index, list(actual_df.index))
 
         expected_patient_cells = ["",
-                                  {"font_size": "12", "bg_color": "#fff", "font_color": "#000000"},
-                                  {"font_size": "12", "bg_color": "#ffa500", "font_color": "#000000"}]
+                                  {"font_size": "12", "bg_color": "white", "font_color": "#000000"},
+                                  {"font_size": "12", "bg_color": "orange", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
 
         expected_rank_cells = ["", "", ""]
@@ -622,7 +676,7 @@ GENE6\t\t'''
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#fff",
+                          "bg_color": "white",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
@@ -652,7 +706,7 @@ GENE6\t\t'''
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
-                          "bg_color": "#ffa500",
+                          "bg_color": "orange",
                           "font_color": "#000000"}
 
         self.assertEquals(expected_style, actual_style)
