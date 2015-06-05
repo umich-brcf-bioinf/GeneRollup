@@ -274,7 +274,7 @@ class SummaryColumns(object):
     def calculate_total_mutations(sample_df):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
-        grouped = sample_df.groupby("GENE_SYMBOL")
+        grouped = sample_df.groupby(_GENE_SYMBOL)
         return grouped.count().apply(sum, 1)
 
 
