@@ -447,7 +447,7 @@ CREBBP\t0\t.'''
         expected_string =\
 '''GENE_SYMBOL\ttotal impacted samples\tdistinct loci\ttotal mutations
 BRCA1\t2\t2\t3
-CREBBP\t1\t1\t1'''
+CREBBP\t0\t1\t0'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
         expected_df = expected_df.applymap(str)
@@ -466,9 +466,9 @@ CREBBP|0|.'''
         summary_cols = rollup_genes.SummaryColumns()
         total_variants = summary_cols.calculate_total_samples(input_df)
 
-        self.assertEquals([2, 1], list(total_variants))
+        self.assertEquals([2, 0], list(total_variants))
 
-    def test_calculate_total_mutations(self):
+    def test_calculate_total_mutations_simpleInputMatrix(self):
         input_string =\
 '''GENE_SYMBOL|SampleA|SampleB
 BRCA1|1|1
@@ -479,7 +479,34 @@ CREBBP|0|.'''
         total_variants =summary_cols.calculate_total_mutations(input_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(total_variants.index.values))
-        self.assertEquals([3, 1], list(total_variants))
+        self.assertEquals([3, 0], list(total_variants))
+
+    def test_calculate_total_mutations_integerInputMatrix(self):
+        input_string =\
+'''GENE_SYMBOL|SampleA|SampleB
+BRCA1|2|1
+BRCA1|.|3
+CREBBP|0|.'''
+        input_df = dataframe(input_string)
+        summary_cols = rollup_genes.SummaryColumns()
+        total_variants =summary_cols.calculate_total_mutations(input_df)
+
+        self.assertEquals(["BRCA1", "CREBBP"], list(total_variants.index.values))
+        self.assertEquals([3, 0], list(total_variants))
+
+    def test_calculate_total_mutations_floatInputMatrix(self):
+        input_string =\
+'''GENE_SYMBOL|SampleA|SampleB
+BRCA1|0.5|0.75
+BRCA1|.|0.1
+CREBBP|0|.'''
+        input_df = dataframe(input_string)
+        summary_cols = rollup_genes.SummaryColumns()
+        total_variants =summary_cols.calculate_total_mutations(input_df)
+
+        self.assertEquals(["BRCA1", "CREBBP"], list(total_variants.index.values))
+        self.assertEquals([3, 0], list(total_variants))
+
 
     def test_calculate_total_loci(self):
         input_string =\

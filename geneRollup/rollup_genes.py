@@ -7,6 +7,7 @@ import sys
 from colour import Color
 
 import pandas as pd
+import numpy as np
 
 
 _SAMPLENAME_REGEX = ""
@@ -258,8 +259,8 @@ class SummaryColumns(object):
 
     @staticmethod
     def calculate_total_samples(sample_df):
-        sample_df = sample_df.applymap(str)
-        sample_df[sample_df == '.'] = None
+        sample_df[sample_df == '.'] = np.nan
+        sample_df[sample_df == '0'] = np.nan
         sample_df = sample_df.groupby(_GENE_SYMBOL).count()
         sample_df[sample_df > 0] = 1
 
@@ -267,13 +268,14 @@ class SummaryColumns(object):
 
     @staticmethod
     def calculate_total_loci(sample_df):
-        return sample_df.groupby(_GENE_SYMBOL).count().ix[:, 0]
+        return sample_df.groupby(_GENE_SYMBOL).size()
 
     @staticmethod
     def calculate_total_mutations(sample_df):
-        sample_df = sample_df.applymap(str)
-        sample_df[sample_df == '.'] = None
-        return sample_df.groupby(_GENE_SYMBOL).count().apply(sum, 1)
+        sample_df[sample_df == '.'] = np.nan
+        sample_df[sample_df == '0'] = np.nan
+        grouped = sample_df.groupby("GENE_SYMBOL")
+        return grouped.count().apply(sum, 1)
 
 
 class SnpEffFormatRule(object):
