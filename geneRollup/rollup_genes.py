@@ -103,10 +103,10 @@ class dbNSFP(object):
 
 class SnpEff(object):
     #pylint: disable=invalid-name, too-few-public-methods
-    _RANK_SCORES = {"HIGH": 100000.0,
-                    "MODERATE": 1,
-                    "LOW": 1/100000.0,
-                    "MODIFIER": 1/10**12}
+    _RANK_SCORES = {"HIGH": 10**9,
+                    "MODERATE": 10**6,
+                    "LOW": 10**3,
+                    "MODIFIER": 10**0}
     _RANK_ABBREVS = {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
 
     def __init__(self, format_rules):
@@ -153,6 +153,7 @@ class SnpEff(object):
 
         for sample in sample_cols:
             #set sample columns equal to impact column value
+            initial_df[sample][initial_df[sample] == "0"] = '.'
             initial_df[sample][initial_df[sample] != "."] = initial_df[self.impact_column]
 
             scored_df[sample + "_SCORE"] = initial_df[sample].map(SnpEff._RANK_SCORES)
@@ -207,11 +208,11 @@ class SnpEff(object):
 
     def _calculate_rank(self, initial_df):
         #pylint: disable=line-too-long
-        category_df = initial_df.sort(self.impact_score_column, ascending=0)
+        category_df = initial_df
+        category_df[self.impact_score_column] = category_df[self.impact_score_column].apply(int)
         category_df[self.impact_rank_column] = category_df[self.impact_score_column].rank(ascending=0, method="min")
         category_df[self.impact_rank_column] = category_df[self.impact_rank_column].apply(int)
         category_df = category_df.applymap(str)
-
         return self._rename_sample_columns(category_df)
 
     def _change_col_order(self, initial_df):
