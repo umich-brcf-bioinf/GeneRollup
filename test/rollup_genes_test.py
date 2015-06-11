@@ -191,27 +191,26 @@ CREBBP\t2\t0\t\t'''
         self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
 
     def test_summarize_formatMatrix(self):
-        FORMAT_DF = pd.DataFrame([[42] * 3] * 2)
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 2)
         formatRule = MockFormatRule(FORMAT_DF)
         dbNSFP = rollup_genes.dbNSFP([formatRule])
 
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
 BRCA1\t2\t1\t1
 BRCA1\t5\t.\t1
 CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
-        (data_df, format_dfs) = dbNSFP.summarize(input_df)
+        (dummy, format_dfs) = dbNSFP.summarize(input_df)
 
-        self.assertIs(data_df, formatRule.last_data_df)
         self.assertEquals(1, len(format_dfs))
         self.assertIs(FORMAT_DF, format_dfs[0])
 
     def test_summarize_multipleFormatRules(self):
-        FORMAT_DF1 = pd.DataFrame([[42] * 3] * 2)
+        FORMAT_DF1 = pd.DataFrame([[42] * 4] * 2)
         formatRule1 = MockFormatRule(FORMAT_DF1)
 
-        FORMAT_DF2 = pd.DataFrame([["A"] * 3] * 2)
+        FORMAT_DF2 = pd.DataFrame([["A"] * 4] * 2)
         formatRule2 = MockFormatRule(FORMAT_DF2)
 
         dbNSFP = rollup_genes.dbNSFP([formatRule1, formatRule2])
@@ -678,7 +677,7 @@ class dbNSFPFormatRuleTestCase(unittest.TestCase):
 GENE1\t\t
 GENE2\t53\t1
 GENE3\t94\t1'''
-        data_df = dataframe(input_string, sep="\t", dtype=str)
+        data_df = dataframe(input_string, sep="\t")
         data_df = data_df.set_index(["GENE_SYMBOL"])
         rule = rollup_genes.dbNSFPFormatRule()
         actual_df = rule.format(data_df)
@@ -686,7 +685,7 @@ GENE3\t94\t1'''
         expected_index = ["GENE1", "GENE2", "GENE3"]
         self.assertEquals(expected_index, list(actual_df.index))
 
-        expected_patient_cells = ["",
+        expected_patient_cells = [{},
                                   {"font_size": "12", "bg_color": "white", "font_color": "#000000"},
                                   {"font_size": "12", "bg_color": "orange", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
@@ -721,13 +720,13 @@ GENE5\t\t
 GENE6\t\t'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
-        expected_df["PATIENT_A"] = ["0", "32", "59", "100", "20", "0"]
+        expected_df["PATIENT_A"] = [0, 32, 59, 100, 20, 0]
 
-        expected_df.fillna("", inplace=True)
-        expected_df = expected_df.applymap(str)
+#         expected_df.fillna("", inplace=True)
+#         expected_df = expected_df.applymap(str)
 
-        self.assertEquals(list([list(i) for i in expected_df.values]),
-                          list([list(i) for i in actual_df.values]))
+        self.assertEquals(list([list(i) for i in str(expected_df.values)]),
+                          list([list(i) for i in str(actual_df.values)]))
 
     def test_style_lightest(self):
         cell_value = 0
@@ -740,7 +739,7 @@ GENE6\t\t'''
         self.assertEquals(expected_style, actual_style)
 
     def test_style_lighter(self):
-        cell_value = "12"
+        cell_value = 12
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
@@ -750,7 +749,7 @@ GENE6\t\t'''
         self.assertEquals(expected_style, actual_style)
 
     def test_style_darker(self):
-        cell_value = "78"
+        cell_value = 78
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
@@ -760,7 +759,7 @@ GENE6\t\t'''
         self.assertEquals(expected_style, actual_style)
 
     def test_style_darkest(self):
-        cell_value = "100"
+        cell_value = 100
         rule = rollup_genes.dbNSFPFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "12",
