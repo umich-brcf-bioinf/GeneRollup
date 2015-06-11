@@ -30,17 +30,28 @@ class dbNSFP(object):
         self.column_label = "damaging votes"
         self.damaging_column = "dbNSFP_rollup_damaging"
         self.damaging_rank_column = "dbNSFP|overall damaging rank"
+        self.damaging_total = "dbNSFP|damaging total"
         self.format_rules = format_rules
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
-        ranked_df = self._calculate_rank(condensed_df)
-        data_df = self._change_col_order(ranked_df)
+        damaging_votes_df = self._build_gene_sample_damaging_votes(condensed_df)
+        damaging_ranks_df = self._build_damaging_ranks(damaging_votes_df)
+        frames = [damaging_ranks_df, damaging_votes_df]
+        data_df = pd.concat(frames, axis=1)
 
         style_dfs = []
         for format_rule in self.format_rules:
             style_dfs.append(format_rule.format(data_df))
 
+        def to_rounded_string(cell_value):
+            try:
+                return str(int(cell_value))
+            except:
+                return ""
+
+        data_df = data_df.applymap(to_rounded_string)
+        data_df = data_df.replace(to_replace=0,value="")
         return data_df, style_dfs
 
     def _remove_unnecessary_columns(self, initial_df):
@@ -55,50 +66,35 @@ class dbNSFP(object):
 
         return condensed_df
 
-    def _calculate_rank(self, initial_df):
-        #pylint: disable=line-too-long
+    def _build_gene_sample_damaging_votes(self,initial_df):
         sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
-        initial_df = initial_df.applymap(str)
-
-        #set sample columns equal to damaging column value
+        damaging_votes_df = initial_df.applymap(str)
+    
         for sample in sample_cols:
-            initial_df[sample][initial_df[sample] != "."] = initial_df[self.damaging_column]
-
-        for sample in sample_cols:
+            damaging_votes_df[sample][damaging_votes_df[sample] == "0"] = "."
+            damaging_votes_df[sample][damaging_votes_df[sample] != "."] = damaging_votes_df[self.damaging_column]
+    
             split_sample = sample.split("|")
             samp_suffix = "|".join(split_sample[1:])
-            sample_name = "|".join([self.name,
-                                    self.column_label,
-                                    samp_suffix])
-            initial_df[sample] = initial_df[sample].apply(lambda x: x if x != "." else 0)
-            initial_df[sample_name] = initial_df[sample].apply(int)
+            sample_name = "|".join([self.name,self.column_label,samp_suffix])
+            damaging_votes_df[sample] = damaging_votes_df[sample].apply(lambda x: x if x != "." else np.nan)
+            damaging_votes_df[sample_name] = damaging_votes_df[sample].apply(float)
+            del damaging_votes_df[sample]
+        damaging_votes_df = damaging_votes_df.convert_objects(convert_numeric=True)
+        damaging_votes_df = damaging_votes_df.groupby(_GENE_SYMBOL).sum()
+        del damaging_votes_df[self.damaging_column]
+        return damaging_votes_df
 
-            del initial_df[sample]
-
-        ranked_df = initial_df.groupby(_GENE_SYMBOL).sum()
-        ranked_df[self.damaging_rank_column] = ranked_df.apply(sum, 1)
-
-        ranked_df.fillna("", inplace=True)
-
-        ranked_df = ranked_df.sort(self.damaging_rank_column, ascending=0)
-        ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].rank(ascending=0, method="min")
-        ranked_df[self.damaging_rank_column] = ranked_df[self.damaging_rank_column].apply(int)
-
-        return ranked_df
-
-    def _change_col_order(self, initial_df):
-        ordered_names = []
-        rank = []
-        for col in initial_df.columns.values:
-            if col == self.damaging_rank_column:
-                rank.append(col)
-            else:
-                ordered_names.append(col)
-
-        all_names = rank + ordered_names
-
-        initial_df = initial_df[all_names]
-        return initial_df
+    def _build_damaging_ranks(self,damaging_votes_df):
+        damaging_votes_df = damaging_votes_df.filter(regex="dbNSFP.*TUMOR")
+        damaging_ranks_df = pd.DataFrame()
+        damaging_ranks_df[self.damaging_total] = damaging_votes_df.sum(axis=1, skipna=True)
+        damaging_ranks_df[self.damaging_total].fillna(0, inplace=True)
+        
+        damaging_ranks_df[self.damaging_rank_column] = damaging_ranks_df[self.damaging_total].rank(ascending=False)
+        damaging_ranks_df[self.damaging_rank_column] = damaging_ranks_df[self.damaging_rank_column].apply(np.floor)
+        damaging_ranks_df = damaging_ranks_df.ix[:,[self.damaging_rank_column,self.damaging_total]]
+        return damaging_ranks_df
 
 
 class SnpEff(object):
@@ -283,8 +279,8 @@ class SnpEffFormatRule(object):
     #pylint: disable=too-few-public-methods
     _COLOR_MAP = {"h": "#003366",
                   "m": "#6699FF",
-                  "l": "#CCCCFF",
-                  "x": "#999999"}
+                  "l": "#99CCFF",
+                  "x": "#CCCCCC"}
 
     def format(self, data_df):
         def _determine_format(cell_value):
@@ -326,41 +322,47 @@ class dbNSFPFormatRule(object):
 
     def format(self, data_df):
         def _determine_format(cell_value):
-            if len(str(cell_value)) > 0:
-                normalized = 100*(cell_value-min_value)/(max_value-min_value)
-                return str(int(normalized))
+            normalized = 100*(cell_value-min_value)/(max_value-min_value)
+            if np.isnan(normalized):
+                return 0
             else:
-                return ""
+                
+                return int(normalized)
+
 
         #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant -pass in?
         format_df = data_df.drop(self.rank_column, 1)
+#         format_df[format_df == ""] = 0
+#         format_df[format_df == np.nan] = 0
+        format_df = format_df.convert_objects(convert_numeric=True)
+        min_value = min(format_df.min(skipna=True))
+        max_value = max(format_df.max(skipna=True))
 
-        min_value = int(min(format_df.min(skipna=True)))
-        max_value = int(max(format_df.max(skipna=True)))
-
-        format_df.fillna("", inplace=True)
+#         format_df.fillna("", inplace=True)
         format_df = format_df.applymap(_determine_format)
 
         format_df[self.rank_column] = pd.Series()
-        format_df.fillna("", inplace=True)
+#         format_df.fillna("", inplace=True)
 
-        for column, dummy in format_df.iteritems():
-            for row, dummy in format_df.iterrows():
-                styled_cell = self._style(format_df.ix[row, column])
-                format_df.ix[row, column] = styled_cell
-
+        format_df = format_df.applymap(self._style)
+#         for column, dummy in format_df.iteritems():
+#             for row, dummy in format_df.iterrows():
+#                 styled_cell = self._style(format_df.ix[row, column])
+#                 format_df.ix[row, column] = styled_cell
         return format_df
 
     @staticmethod
     def _style(cell_value):
-        if len(str(cell_value)) > 0:
+        if np.isnan(cell_value):
+            return {}
+        else:
+#         if len(str(cell_value)) > 0:
             cell_value = int(cell_value)
             color = dbNSFPFormatRule._RANGE_RULE[cell_value]
             styled_cell = {"font_size": "12",
                            "bg_color": str(color),
                            "font_color": dbNSFPFormatRule._FONT_COLOR}
             return styled_cell
-        return ""
 
 
 #TODO: (jebene) hookup rankformatrule
