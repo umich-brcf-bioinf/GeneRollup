@@ -173,7 +173,7 @@ CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
         input_df = input_df.applymap(str)
         (data_df, style_dfs) = dbNSFP.summarize(input_df)
-        
+
         self.assertEquals(1, len(style_dfs))
         self.assertEquals(data_df.shape, style_dfs[0].shape)
 
@@ -182,6 +182,35 @@ CREBBP\t3\t0\t.'''
 '''GENE_SYMBOL\tdbNSFP|overall damaging rank\tdbNSFP|damaging total\tdbNSFP|damaging votes|P1|TUMOR\tdbNSFP|damaging votes|P2|TUMOR
 BRCA1\t1\t9\t2\t7
 CREBBP\t2\t0\t\t'''
+        expected_df = dataframe(expected_string, sep="\t", dtype=str)
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals('\t'.join(expected_df.columns.values), '\t'.join(data_df.columns.values))
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
+
+    def test_summarize_dataMatrixIgnoresNullOrZeroDamagingCounts(self):
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 1)
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
+
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
+BRCA1\t0\t1\t1
+BRCA1\t1\t.\t1
+CREBBP\t.\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        input_df = input_df.applymap(str)
+        (data_df, style_dfs) = dbNSFP.summarize(input_df)
+
+        self.assertEquals(1, len(style_dfs))
+        self.assertEquals(data_df.shape, style_dfs[0].shape)
+
+        data_df = data_df.applymap(str)
+        expected_string =\
+'''GENE_SYMBOL\tdbNSFP|overall damaging rank\tdbNSFP|damaging total\tdbNSFP|damaging votes|P1|TUMOR\tdbNSFP|damaging votes|P2|TUMOR
+BRCA1\t1\t1\t\t1'''
         expected_df = dataframe(expected_string, sep="\t", dtype=str)
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
         expected_df.fillna("", inplace=True)
@@ -271,7 +300,7 @@ CREBBP\t5\t1\t.'''
 #         input_df = dataframe(input_string, sep="\t")
 #         formatRule = MockFormatRule(FORMAT_DF)
 #         dbNSFP = rollup_genes.dbNSFP([formatRule])
-# 
+
 #         indexed_df = input_df.set_index(["GENE_SYMBOL"])
 #         rearranged_df = dbNSFP._change_col_order(indexed_df)
 #         self.assertEquals(["dbNSFP|overall damaging rank", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
@@ -317,6 +346,43 @@ JQ_SUMMARY_SOM_COUNT|P2|TUMOR'''
         expected_string = expected_header.replace("\n", "\t") + '''
 BRCA1|1|2000001000|2|0|1|0|h|hl
 CREBBP|2|0|0|0|0|0||'''.replace("|", "\t")
+        expected_df = dataframe(expected_string, sep="\t")
+        expected_df = expected_df.set_index(["GENE_SYMBOL"])
+        expected_df.fillna("", inplace=True)
+        expected_df = expected_df.applymap(str)
+
+        self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
+
+    def test_summarize_dataMatrixIgnoresNullOrZeroImpact(self):
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
+        formatRule = MockFormatRule(FORMAT_DF)
+        snpEff = rollup_genes.SnpEff([formatRule])
+
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
+BRCA1\t.\t1\t1
+BRCA1\t\t.\t1
+CREBBP\tHIGH\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        (data_df, style_dfs) = snpEff.summarize(input_df)
+
+        self.assertEquals(1, len(style_dfs))
+        self.assertEquals(data_df.shape, style_dfs[0].shape)
+
+        data_df = data_df.applymap(str)
+        expected_header = \
+'''GENE_SYMBOL
+SnpEff|overall impact rank
+SnpEff|overall impact score
+SnpEff|impact category|HIGH
+SnpEff|impact category|MODERATE
+SnpEff|impact category|LOW
+SnpEff|impact category|MODIFIER
+JQ_SUMMARY_SOM_COUNT|P1|TUMOR
+JQ_SUMMARY_SOM_COUNT|P2|TUMOR'''
+
+        expected_string = expected_header.replace("\n", "\t") + '''
+CREBBP|1|0|0|0|0|0||'''.replace("|", "\t")
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
         expected_df.fillna("", inplace=True)
@@ -690,7 +756,7 @@ GENE3\t94\t1'''
                                   {"font_size": "12", "bg_color": "orange", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
 
-        expected_rank_cells = ["", "", ""]
+        expected_rank_cells = [{}, {}, {}]
         self.assertEquals(expected_rank_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
 
     def test_format_standalone(self):
@@ -935,6 +1001,8 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected = open(expected_file).readlines()
 
+            print expected
+            print open(output_file).readlines()
             for i, actual in enumerate(open(output_file).readlines()):
                 self.assertEquals(expected[i], actual)
 
