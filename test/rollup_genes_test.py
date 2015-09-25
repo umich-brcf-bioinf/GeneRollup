@@ -1,10 +1,12 @@
 #pylint: disable=line-too-long, too-many-public-methods, invalid-name
-#pylint: disable=maybe-no-member, too-few-public-methods
+#pylint: disable=maybe-no-member, too-few-public-methods, no-member
 from __future__ import absolute_import
 
-from argparse import Namespace
 from StringIO import StringIO
+from argparse import Namespace
+from collections import OrderedDict
 import filecmp
+import numpy
 import os
 import unittest
 
@@ -47,7 +49,7 @@ class GeneRollupArgsTestCase(unittest.TestCase):
                          output_file="output",
                          sample_column_regex="Sample.*",
                          gene_column_name=None,
-                         xlsx=None)
+                         tsv=None)
         rollup_genes._change_global_variables(args)
         self.assertEquals("Sample.*", rollup_genes._SAMPLENAME_REGEX)
 
@@ -56,7 +58,7 @@ class GeneRollupArgsTestCase(unittest.TestCase):
                          output_file="output",
                          sample_column_regex=None,
                          gene_column_name="GeneSymbol",
-                         xlsx=None)
+                         tsv=None)
         rollup_genes._change_global_variables(args)
         self.assertEquals("GeneSymbol", rollup_genes._GENE_SYMBOL)
 
@@ -65,9 +67,9 @@ class GeneRollupArgsTestCase(unittest.TestCase):
                          output_file="output",
                          sample_column_regex=None,
                          gene_column_name=None,
-                         xlsx=True)
+                         tsv=True)
         rollup_genes._change_global_variables(args)
-        self.assertEquals(True, rollup_genes._XLSX)
+        self.assertEquals(False, rollup_genes._XLSX)
 
 class GeneRollupTestCase(unittest.TestCase):
     def test_create_df(self):
@@ -110,6 +112,38 @@ CREBBP\thhh\t6\t1'''
 
         self.assertEquals(["BRCA2", "SON", "CREBBP", "BRCA1", "EGFR"], list(sorted_df["gene symbol"].values))
         self.assertEquals([1, 1, 1, 2, 3], list(sorted_df["dbNSFP|overall damaging rank"].values))
+
+    def test_combine_dfs(self):
+        summary_string =\
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL
+BRCA1\t1
+EGFR\t1
+CREBBP\t1'''
+        summary_df = dataframe(summary_string, sep="\t")
+        summary_df = summary_df.set_index(["GENE_SYMBOL"])
+
+        dbNSFP_string =\
+'''GENE_SYMBOL\tdbNSFP|P1|NORMAL
+BRCA1\t2
+CREBBP\t4'''
+        dbNSFP_df = dataframe(dbNSFP_string, sep="\t")
+        dbNSFP_df = dbNSFP_df.set_index(["GENE_SYMBOL"])
+
+        snpEff_string =\
+'''GENE_SYMBOL\tsnpEff|P1|NORMAL
+BRCA1\th
+CREBBP\thh'''
+        snpEff_df = dataframe(snpEff_string, sep="\t")
+        snpEff_df = snpEff_df.set_index(["GENE_SYMBOL"])
+
+        dfs = OrderedDict()
+        dfs["summary"] = summary_df
+        dfs["dbNSFP"] = dbNSFP_df
+        dfs["snpEff"] = snpEff_df
+
+        actual = rollup_genes._combine_dfs(dfs)
+
+        self.assertEquals(["BRCA1", "CREBBP"], list(actual.index.values))
 
     def test_translate_to_excel(self):
         with TempDirectory() as output_dir:
@@ -159,6 +193,42 @@ class dbNSFPTestCase(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+    def test_remove_unnecessary_columns(self):
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 1)
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
+
+        input_string = \
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tBAZ\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR\tFOO\tBAR'''
+        input_df = dataframe(input_string, sep="\t")
+
+        actual = dbNSFP._remove_unnecessary_columns(input_df)
+
+        self.assertEquals(4, len(actual.columns))
+        self.assertNotIn("BAZ", actual.columns)
+        self.assertNotIn("FOO", actual.columns)
+        self.assertNotIn("BAR", actual.columns)
+
+    def test_remove_invalid_rows(self):
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 2)
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
+
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
+BRCA1\t2\t1\t1
+BRCA1\t0\t.\t1
+BRCA1\t\t1\t1
+BRCA1\t.\t1\t1
+CREBBP\t3\t0\t.'''
+
+        input_df = dataframe(input_string, sep="\t")
+        actual = dbNSFP._remove_invalid_rows(input_df)
+
+        self.assertEquals(["2", "3"], list(actual["dbNSFP_rollup_damaging"].values))
+        self.assertEquals(["1", "0"], list(actual["JQ_SUMMARY_SOM_COUNT|P1|TUMOR"].values))
+        self.assertEquals(["1", "."], list(actual["JQ_SUMMARY_SOM_COUNT|P2|TUMOR"].values))
 
     def test_summarize_dataMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 4] * 2)
@@ -230,6 +300,7 @@ BRCA1\t2\t1\t1
 BRCA1\t5\t.\t1
 CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
+        input_df = input_df.applymap(str)
         (dummy, format_dfs) = dbNSFP.summarize(input_df)
 
         self.assertEquals(1, len(format_dfs))
@@ -250,12 +321,31 @@ BRCA1\t2\t1\t1
 BRCA1\t5\t.\t1
 CREBBP\t3\t0\t.'''
         input_df = dataframe(input_string, sep="\t")
+        input_df = input_df.applymap(str)
         (data_df, format_dfs) = dbNSFP.summarize(input_df)
 
         self.assertIs(data_df, formatRule1.last_data_df)
         self.assertEquals(2, len(format_dfs))
         self.assertIs(FORMAT_DF1, format_dfs[0])
         self.assertIs(FORMAT_DF2, format_dfs[1])
+
+    def test_build_damaging_votes(self):
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
+BRCA1\t2\t1\t1
+BRCA1\t3\t.\t1
+BRCA1\t3\t\t1
+CREBBP\t2\t0\t.'''
+        input_df = dataframe(input_string, sep="\t")
+        formatRule = MockFormatRule(FORMAT_DF)
+        dbNSFP = rollup_genes.dbNSFP([formatRule])
+
+        damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
+        self.assertEquals(["BRCA1", "CREBBP"], list(damaging_votes_df.index.values))
+        self.assertEquals(5.0, list(damaging_votes_df["dbNSFP|damaging votes|P1|TUMOR"].values)[0])
+        self.assertTrue(numpy.isnan(list(damaging_votes_df["dbNSFP|damaging votes|P1|TUMOR"].values)[1]))
+
 
     def test_build_damaging_ranks(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
@@ -268,7 +358,6 @@ CREBBP\t2\t0\t.'''
         formatRule = MockFormatRule(FORMAT_DF)
         dbNSFP = rollup_genes.dbNSFP([formatRule])
 
-#         ranked_df = dbNSFP._calculate_rank(input_df)
         damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
         ranked_df = dbNSFP._build_damaging_ranks(damaging_votes_df)
 
@@ -285,26 +374,10 @@ CREBBP\t5\t1\t.'''
         formatRule = MockFormatRule(FORMAT_DF)
         dbNSFP = rollup_genes.dbNSFP([formatRule])
 
-#         ranked_df = dbNSFP._calculate_rank(input_df)
         damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
         ranked_df = dbNSFP._build_damaging_ranks(damaging_votes_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
         self.assertEquals([1, 1], list(ranked_df["dbNSFP|overall damaging rank"].values))
-
-#     def test_change_col_order(self):
-#         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
-#         input_string =\
-# '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tdbNSFP|overall damaging rank
-# BRCA1\th\thl\t1
-# CREBBP\tm\t.\t2'''
-#         input_df = dataframe(input_string, sep="\t")
-#         formatRule = MockFormatRule(FORMAT_DF)
-#         dbNSFP = rollup_genes.dbNSFP([formatRule])
-
-#         indexed_df = input_df.set_index(["GENE_SYMBOL"])
-#         rearranged_df = dbNSFP._change_col_order(indexed_df)
-#         self.assertEquals(["dbNSFP|overall damaging rank", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
-#                             list(rearranged_df.columns.values))
 
 class SnpEffTestCase(unittest.TestCase):
     def setUp(self):
@@ -314,6 +387,42 @@ class SnpEffTestCase(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+    def test_remove_unnecessary_columns(self):
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 1)
+        formatRule = MockFormatRule(FORMAT_DF)
+        snpEff = rollup_genes.SnpEff([formatRule])
+
+        input_string = \
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tBAZ\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR\tFOO\tBAR'''
+        input_df = dataframe(input_string, sep="\t")
+
+        actual = snpEff._remove_unnecessary_columns(input_df)
+
+        self.assertEquals(4, len(actual.columns))
+        self.assertNotIn("BAZ", actual.columns)
+        self.assertNotIn("FOO", actual.columns)
+        self.assertNotIn("BAR", actual.columns)
+
+    def test_remove_invalid_rows(self):
+        FORMAT_DF = pd.DataFrame([[42] * 4] * 2)
+        formatRule = MockFormatRule(FORMAT_DF)
+        snpEff = rollup_genes.SnpEff([formatRule])
+
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
+BRCA1\tHIGH\t1\t1
+BRCA1\tLOW\t.\t1
+BRCA1\t\t1\t1
+BRCA1\t.\t1\t1
+CREBBP\tMODIFIER\t0\t.'''
+
+        input_df = dataframe(input_string, sep="\t")
+        actual = snpEff._remove_invalid_rows(input_df)
+
+        self.assertEquals(["HIGH", "LOW", "MODIFIER"], list(actual["SNPEFF_TOP_EFFECT_IMPACT"].values))
+        self.assertEquals(["1", ".", "0"], list(actual["JQ_SUMMARY_SOM_COUNT|P1|TUMOR"].values))
+        self.assertEquals(["1", "1", "."], list(actual["JQ_SUMMARY_SOM_COUNT|P2|TUMOR"].values))
 
     def test_summarize_dataMatrix(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
@@ -354,7 +463,7 @@ CREBBP|2|0|0|0|0|0||'''.replace("|", "\t")
         self.assertEquals([list(i) for i in expected_df.values], [list(i) for i in data_df.values])
 
     def test_summarize_dataMatrixIgnoresNullOrZeroImpact(self):
-        FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
+        FORMAT_DF = pd.DataFrame([[42] * 8] * 1)
         formatRule = MockFormatRule(FORMAT_DF)
         snpEff = rollup_genes.SnpEff([formatRule])
 
@@ -496,8 +605,8 @@ geneE\t20'''
     def test_calculate_rank_tie(self):
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
-BRCA1\t.\tm\t1
-CREBBP\tm\t.\t1'''
+CREBBP\tm\t.\t1
+BRCA1\t.\tm\t1'''
         input_df = dataframe(input_string, sep="\t")
         SnpEff = rollup_genes.SnpEff([MockFormatRule])
 

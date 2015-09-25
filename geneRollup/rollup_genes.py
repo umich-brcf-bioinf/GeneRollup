@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#pylint:disable=line-too-long, no-member
 import argparse
 from collections import OrderedDict
 import re
@@ -10,9 +11,9 @@ import pandas as pd
 import numpy as np
 
 
-_SAMPLENAME_REGEX = ""
-_GENE_SYMBOL = ""
-_XLSX = False
+_SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
+_GENE_SYMBOL = "SNPEFF_TOP_EFFECT_GENE_SYMBOL"
+_XLSX = True
 
 _LOCI_COUNT = "distinct loci"
 _SAMPLE_COUNT = "total impacted samples"
@@ -41,11 +42,9 @@ class dbNSFP(object):
                 return ""
 
         condensed_df = self._remove_unnecessary_columns(initial_df)
-        condensed_df[self.damaging_column] = condensed_df[self.damaging_column].apply(lambda x: 0 if x == "." else x)
-        condensed_df = condensed_df.convert_objects(convert_numeric=True)
-        condensed_df = condensed_df[condensed_df[self.damaging_column] != 0]
+        validated_df = self._remove_invalid_rows(condensed_df)
 
-        damaging_votes_df = self._build_gene_sample_damaging_votes(condensed_df)
+        damaging_votes_df = self._build_gene_sample_damaging_votes(validated_df)
         damaging_ranks_df = self._build_damaging_ranks(damaging_votes_df)
 
         frames = [damaging_ranks_df, damaging_votes_df]
@@ -72,24 +71,38 @@ class dbNSFP(object):
 
         return condensed_df
 
-    def _build_gene_sample_damaging_votes(self,initial_df):
+    def _remove_invalid_rows(self, initial_df):
+        initial_df.fillna(".", inplace=True)
+        initial_df = initial_df[initial_df[self.damaging_column] != "."]
+
+        initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(int)
+        initial_df = initial_df[initial_df[self.damaging_column] > 0]
+
+        initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(str)
+
+        return initial_df
+
+    def _build_gene_sample_damaging_votes(self, initial_df):
         sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
-        damaging_votes_df = initial_df.applymap(str)
+        initial_df = initial_df.applymap(str)
 
         for sample in sample_cols:
-            damaging_votes_df[sample][damaging_votes_df[sample] == '0.0'] = "."
-            damaging_votes_df[sample][damaging_votes_df[sample] == 'nan'] = "."
-            damaging_votes_df[sample][damaging_votes_df[sample] != "."] = damaging_votes_df[self.damaging_column]
+            initial_df[sample][initial_df[sample] == '0'] = "."
+
+            initial_df.fillna(".", inplace=True)
+            initial_df[sample][initial_df[sample] != "."] = initial_df[self.damaging_column]
 
             split_sample = sample.split("|")
             samp_suffix = "|".join(split_sample[1:])
             sample_name = "|".join([self.name,self.column_label,samp_suffix])
-            damaging_votes_df[sample] = damaging_votes_df[sample].apply(lambda x: x if x != "." else np.nan)
-            damaging_votes_df[sample_name] = damaging_votes_df[sample].apply(float)
-            del damaging_votes_df[sample]
+            initial_df[sample] = initial_df[sample].apply(lambda x: x if x != "." else np.nan)
+            initial_df[sample_name] = initial_df[sample].apply(float)
+            del initial_df[sample]
 
-        damaging_votes_df = damaging_votes_df.convert_objects(convert_numeric=True)
+        damaging_votes_df = initial_df.convert_objects(convert_numeric=True)
+        damaging_votes_df = damaging_votes_df.applymap(lambda x: x if x != "." else 0)
         damaging_votes_df = damaging_votes_df.groupby(_GENE_SYMBOL).sum()
+        damaging_votes_df = damaging_votes_df.applymap(lambda x: x if x != 0 else ".")
         del damaging_votes_df[self.damaging_column]
 
         return damaging_votes_df
@@ -113,7 +126,11 @@ class SnpEff(object):
                     "MODERATE": 10**6,
                     "LOW": 10**3,
                     "MODIFIER": 10**0}
-    _RANK_ABBREVS = {"HIGH": "h", "MODERATE": "m", "LOW": "l", "MODIFIER": "x"}
+    _RANK_ABBREVS = {"HIGH": "h",
+                     "MODERATE": "m",
+                     "LOW": "l",
+                     "MODIFIER": "x",
+                     ".": ""}
 
     def __init__(self, format_rules):
         self.name = "SnpEff"
@@ -126,10 +143,9 @@ class SnpEff(object):
 
     def summarize(self, initial_df):
         condensed_df = self._remove_unnecessary_columns(initial_df)
-        condensed_df[self.impact_column] = condensed_df[self.impact_column].apply(lambda x: 0 if x == "." else x)
-        condensed_df = condensed_df.convert_objects(convert_numeric=True)
+        validated_df = self._remove_invalid_rows(condensed_df)
 
-        scored_df = self._calculate_score(condensed_df)
+        scored_df = self._calculate_score(validated_df)
         category_df = self._get_impact_category_counts(scored_df)
         ranked_df = self._calculate_rank(category_df)
         data_df = self._change_col_order(ranked_df)
@@ -152,6 +168,12 @@ class SnpEff(object):
 
         return condensed_df
 
+    def _remove_invalid_rows(self, initial_df):
+        initial_df.fillna(".", inplace=True)
+        initial_df = initial_df[initial_df[self.impact_column] != "."]
+
+        return initial_df
+
     def _calculate_score(self, initial_df):
     #pylint: disable=line-too-long
         sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
@@ -162,7 +184,9 @@ class SnpEff(object):
 
         for sample in sample_cols:
             #set sample columns equal to impact column value
-            initial_df[sample][initial_df[sample] == "0"] = '.'
+            initial_df[sample][initial_df[sample] == '0'] = "."
+
+            initial_df.fillna(".", inplace=True)
             initial_df[sample][initial_df[sample] != "."] = initial_df[self.impact_column]
 
             scored_df[sample + "_SCORE"] = initial_df[sample].map(SnpEff._RANK_SCORES)
@@ -456,6 +480,15 @@ def _combine_style_dfs(dfs):
 
 def _combine_dfs(dfs):
     summary_df, dbnsfp_df, snpeff_df = dfs.values()
+
+    dbnsfp_genes = set(dbnsfp_df.index.values)
+    snpeff_genes = set(snpeff_df.index.values)
+    summary_genes = set(summary_df.index.values)
+    valid_genes = dbnsfp_genes.intersection(snpeff_genes)
+    invalid_genes = summary_genes.difference(valid_genes)
+ 
+    summary_df = summary_df.drop(list(invalid_genes))
+
     combined_df = summary_df.join(dbnsfp_df, how='outer')
     combined_df = combined_df.join(snpeff_df, how='outer')
     combined_df = combined_df.fillna("")
@@ -535,22 +568,25 @@ def _rollup(input_file, output_file):
 def _change_global_variables(args):
     #pylint: disable=global-statement
     global _SAMPLENAME_REGEX
-    _SAMPLENAME_REGEX = args.sample_column_regex
+    if args.sample_column_regex:
+        _SAMPLENAME_REGEX = args.sample_column_regex
 
     global _GENE_SYMBOL
-    _GENE_SYMBOL = args.gene_column_name
+    if args.gene_column_name:
+        _GENE_SYMBOL = args.gene_column_name
 
     global _XLSX
-    _XLSX = args.xlsx
+    if args.tsv:
+        _XLSX = False
 
 def _add_arg_parse(args):
     parser = argparse.ArgumentParser()
     #pylint: disable=line-too-long
     parser.add_argument("input_file", help=("A tab-delimited file of variants x samples"))
     parser.add_argument("output_file", help=("A tab-delimited file of genes x samples"))
-    parser.add_argument("--sample_column_regex", required=True, help="Regex used to define the sample columns in the input file. Default is 'JQ_SUMMARY_SOM_COUNT.*'")
-    parser.add_argument("--gene_column_name", required=True, help="Name of gene symbol column in the output file. Default is 'gene symbol'")
-    parser.add_argument("--xlsx", action="store_true", help="Write to an xlsx file rather than a tsv file")
+    parser.add_argument("--sample_column_regex", help="Regex used to define the sample columns in the input file. Default is 'JQ_SUMMARY_SOM_COUNT.*'")
+    parser.add_argument("--gene_column_name", help="Name of gene symbol column in the output file. Default is 'SNPEFF_TOP_EFFECT_GENE_SYMBOL'")
+    parser.add_argument("--tsv", action="store_true", help="Write to a tsv file rather than an xlsx file")
 
     return parser.parse_args(args)
 
