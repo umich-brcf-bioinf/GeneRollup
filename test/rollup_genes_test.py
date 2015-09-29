@@ -737,15 +737,15 @@ HIGH2|1|1'''
         rule = rollup_genes.SnpEffFormatRule()
         actual_df = rule.format(data_df)
 
-        expected_string = \
-'''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
-HIGH1||
-HIGH2||'''
-        expected_df = dataframe(expected_string)
-        expected_df = expected_df.set_index(["GENE_SYMBOL"])
-        expected_df.fillna("", inplace=True)
-        self.assertEquals(list([list(i) for i in expected_df.values]),
-                          list([list(i) for i in actual_df.values]))
+        actual_values = list(actual_df.values)
+        self.assertEquals(2, len(actual_values))
+        self.assertEquals(2, len(actual_values[0]))
+        self.assertEquals(2, len(actual_values[1]))
+
+        pd.isnull(actual_values[0][0])
+        pd.isnull(actual_values[0][1])
+        pd.isnull(actual_values[1][0])
+        pd.isnull(actual_values[1][1])
 
     def test_format_style(self):
         input_string =\
@@ -761,13 +761,16 @@ NULL1||'''
         expected_index = ["MOD", "HIGH", "NULL1"]
         self.assertEquals(expected_index, list(actual_df.index))
 
-        expected_patient_cells = [{"font_size": "4", "bg_color": "#6699FF", "font_color": "#6699FF"},
+        expected_patient_cells = [{"font_size": "4", "bg_color": "#3377B9", "font_color": "#3377B9"},
                                   {"font_size": "4", "bg_color": "#003366", "font_color": "#003366"},
-                                  ""]
+                                  numpy.nan]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
 
-        expected_rank_cells = ["", "", ""]
-        self.assertEquals(expected_rank_cells, list(actual_df["SnpEff_overall_impact_rank"].values))
+        actual_values = list(actual_df["SnpEff_overall_impact_rank"].values)
+        self.assertEquals(3, len(actual_values))
+        pd.isnull(actual_values[0])
+        pd.isnull(actual_values[1])
+        pd.isnull(actual_values[2])
 
     def test_format_standalone(self):
         input_string =\
@@ -819,8 +822,8 @@ NULL1||'''
         rule = rollup_genes.SnpEffFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
-                          "bg_color": "#6699FF",
-                          "font_color": "#6699FF"}
+                          "bg_color": "#3377B9",
+                          "font_color": "#3377B9"}
 
         self.assertEquals(expected_style, actual_style)
 
@@ -829,8 +832,8 @@ NULL1||'''
         rule = rollup_genes.SnpEffFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
-                          "bg_color": "#99CCFF",
-                          "font_color": "#99CCFF"}
+                          "bg_color": "#91C4E8",
+                          "font_color": "#91C4E8"}
 
         self.assertEquals(expected_style, actual_style)
 
@@ -848,10 +851,10 @@ NULL1||'''
 class dbNSFPFormatRuleTestCase(unittest.TestCase):
     def test_format_style(self):
         input_string =\
-'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
-GENE1\t\t
-GENE2\t53\t1
-GENE3\t94\t1'''
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank\tdbNSFP|damaging total
+GENE1\t\t\t1
+GENE2\t53\t1\t1
+GENE3\t94\t1\t2'''
         data_df = dataframe(input_string, sep="\t")
         data_df = data_df.set_index(["GENE_SYMBOL"])
         rule = rollup_genes.dbNSFPFormatRule()
@@ -860,23 +863,27 @@ GENE3\t94\t1'''
         expected_index = ["GENE1", "GENE2", "GENE3"]
         self.assertEquals(expected_index, list(actual_df.index))
 
-        expected_patient_cells = [{},
+        expected_patient_cells = [numpy.nan,
                                   {"font_size": "12", "bg_color": "white", "font_color": "#000000"},
                                   {"font_size": "12", "bg_color": "orange", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
 
-        expected_rank_cells = [{}, {}, {}]
-        self.assertEquals(expected_rank_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
+        actual_values = list(actual_df["dbNSFP|overall damaging rank"].values)
+        self.assertEquals(3, len(actual_values))
+
+        pd.isnull(actual_values[0])
+        pd.isnull(actual_values[1])
+        pd.isnull(actual_values[2])
 
     def test_format_standalone(self):
         input_string =\
-'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
-GENE1\t3\t1
-GENE2\t53\t1
-GENE3\t94\t1
-GENE4\t157\t1
-GENE5\t33\t1
-GENE6\t2\t1'''
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank\tdbNSFP|damaging total
+GENE1\t3\t1\t1
+GENE2\t53\t1\t1
+GENE3\t94\t1\t1
+GENE4\t157\t1\t1
+GENE5\t33\t1\t1
+GENE6\t2\t1\t1'''
         data_df = dataframe(input_string, sep="\t")
         data_df = data_df.set_index(["GENE_SYMBOL"])
         rule = rollup_genes.dbNSFPFormatRule()
@@ -884,6 +891,7 @@ GENE6\t2\t1'''
 
         rollup_genes._SAMPLENAME_REGEX = "PATIENT.*"
         actual_df = rule.format(data_df)
+        actual_df = actual_df.drop("dbNSFP|damaging total", 1)
 
         expected_string = \
 '''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
@@ -896,9 +904,6 @@ GENE6\t\t'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
         expected_df["PATIENT_A"] = [0, 32, 59, 100, 20, 0]
-
-#         expected_df.fillna("", inplace=True)
-#         expected_df = expected_df.applymap(str)
 
         self.assertEquals(list([list(i) for i in str(expected_df.values)]),
                           list([list(i) for i in str(actual_df.values)]))
@@ -959,8 +964,8 @@ GENE3\t6'''
         expected_index = ["GENE1", "GENE2", "GENE3"]
         self.assertEquals(expected_index, list(actual_df.index))
 
-        expected_patient_cells = [{"font_size": "12", "bg_color": "red", "font_color": "#000000"},
-                                  "",
+        expected_patient_cells = [{"font_size": "12", "bg_color": "#e27171", "font_color": "#000000"},
+                                  numpy.nan,
                                   {"font_size": "12", "bg_color": "white", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
 

@@ -315,9 +315,19 @@ class SummaryColumns(object):
 class SnpEffFormatRule(object):
     #pylint: disable=too-few-public-methods
     _COLOR_MAP = {"h": "#003366",
-                  "m": "#6699FF",
-                  "l": "#99CCFF",
+                  "m": "#3377B9",
+                  "l": "#91C4E8",
                   "x": "#CCCCCC"}
+    _FONT_COLOR = "#000000"
+
+    def __init__(self):
+        self.rank_column = "SnpEff|overall impact rank"
+        self.score_column = "SnpEff|overall impact score"
+        self.range_rule = list(Color("white").range_to(Color("blue"), 101))
+
+    def _reset_range_rule(self, max_color, max_value):
+        self.range_rule = list(Color("white").range_to(Color(max_color),
+                                                       max_value))
 
     def format(self, data_df):
         def _determine_format(cell_value):
@@ -326,36 +336,68 @@ class SnpEffFormatRule(object):
                     return letter
             return ""
 
-        format_df = data_df.applymap(str)
-        format_df = format_df.applymap(_determine_format)
+        def _determine_score_format(cell_value):
+            normalized = 1000*(cell_value-min_value)/(max_value-min_value)
+            if np.isnan(normalized):
+                return cell_value
+            else:
+                return int(normalized) #float?
 
-        for column, dummy in format_df.iteritems():
-            for row, dummy in format_df.iterrows():
-                styled_cell = self._style(format_df.ix[row, column])
-                format_df.ix[row, column] = styled_cell
+        format_df = data_df.applymap(str)
+        score_series = format_df[self.score_column].apply(int)
+        format_df = format_df.drop(self.score_column, 1)
+
+        format_df = format_df.applymap(_determine_format)
+        format_df = format_df.applymap(self._style)
+
+        min_value = int(score_series.min())
+        max_value = int(score_series.max())
+
+        score_series = score_series.apply(_determine_score_format)
+        max_range_value = int(score_series.max())
+
+        self._reset_range_rule("blue", max_range_value + 1)
+        format_df[self.score_column] = score_series.apply(self._style_score)
 
         return format_df
 
     @staticmethod
     def _style(cell_value):
-        if len(cell_value) > 0:
+        if len(cell_value) < 1:
+            return np.nan
+
+        else:
             styled_cell = {"font_size": "4",
                            "bg_color": SnpEffFormatRule\
                                                ._COLOR_MAP[cell_value],
                            "font_color": SnpEffFormatRule\
                                          ._COLOR_MAP[cell_value]}
             return styled_cell
-        return ""
+
+    def _style_score(self, cell_value):
+        if np.isnan(cell_value):
+            return np.nan
+        else:
+            color = self.range_rule[cell_value]
+            styled_cell = {"font_size": "12",
+                           "bg_color": str(color),
+                           "font_color": SnpEffFormatRule._FONT_COLOR}
+            return styled_cell
 
 
 class dbNSFPFormatRule(object):
     #pylint: disable=invalid-name,too-few-public-methods
 
-    _RANGE_RULE = list(Color("white").range_to(Color("orange"), 101))
     _FONT_COLOR = "#000000"
 
     def __init__(self):
         self.rank_column = "dbNSFP|overall damaging rank"
+        self.total_column = "dbNSFP|damaging total"
+        self.range_rule = list(Color("white").range_to(Color("orange"), 101))
+
+    def _reset_range_rule(self, max_color, max_value):
+        self.range_rule = list(Color("white").range_to(Color(max_color),
+                                                       max_value))
 
     def format(self, data_df):
         def _determine_format(cell_value):
@@ -365,59 +407,60 @@ class dbNSFPFormatRule(object):
             else:
                 return int(normalized)
 
-        #TODO: (jebene) make "dbNSFP|overall damaging rank" a constant -pass in?
         format_df = data_df.drop(self.rank_column, 1)
+        total_series = format_df[self.total_column].apply(int)
+        format_df = format_df.drop(self.total_column, 1)
+
         format_df = format_df.replace("", np.nan)
         format_df = format_df.convert_objects(convert_numeric=True)
 
         min_value = min(format_df.min(skipna=True))
         max_value = max(format_df.max(skipna=True))
 
-#         format_df.fillna("", inplace=True)
         format_df = format_df.applymap(_determine_format)
-
         format_df[self.rank_column] = pd.Series()
-#         format_df.fillna("", inplace=True)
 
         format_df = format_df.applymap(self._style)
-#         for column, dummy in format_df.iteritems():
-#             for row, dummy in format_df.iterrows():
-#                 styled_cell = self._style(format_df.ix[row, column])
-#                 format_df.ix[row, column] = styled_cell
+
+        max_range_value = int(total_series.max())
+        self._reset_range_rule("yellow", max_range_value + 1)
+        format_df[self.total_column] = total_series.apply(self._style)
+
         return format_df
 
-    @staticmethod
-    def _style(cell_value):
+    def _style(self, cell_value):
         if np.isnan(cell_value):
-            return {}
+            return np.nan
         else:
             cell_value = int(cell_value)
-            color = dbNSFPFormatRule._RANGE_RULE[cell_value]
+            color = self.range_rule[cell_value]
             styled_cell = {"font_size": "12",
                            "bg_color": str(color),
                            "font_color": dbNSFPFormatRule._FONT_COLOR}
             return styled_cell
 
 
-#TODO: (jebene) hookup rankformatrule
 class RankFormatRule(object):
     #pylint: disable=invalid-name, too-few-public-methods
-    _RANGE_RULE = list(Color("red").range_to(Color("white"), 101))
+
     _FONT_COLOR = "#000000"
 
     def __init__(self):
         #TODO: (jebene) modify regex storage so that annotations and format rule refer to same format
         self.rank_regex = r".*\|overall .* rank"
+        self.range_rule = list(Color("red").range_to(Color("white"), 101))
 
     def format(self, data_df):
         def _determine_format(cell_value):
             if len(str(cell_value)) > 0:
+                cell_value = int(cell_value)
                 normalized = 100*(cell_value-min_value)/(max_value-min_value)
                 return str(int(normalized))
             else:
                 return ""
 
         format_df = data_df.copy()
+
         for col in format_df.columns.values:
             if re.search(self.rank_regex, col):
                 min_value = int(format_df[col].min(skipna=True))
@@ -428,6 +471,9 @@ class RankFormatRule(object):
             else:
                 format_df[col] = format_df[col].apply(lambda x: "")
 
+        max_range_value = int(max(format_df.max(1)))
+        self._set_max_range_rule(max_range_value)
+
         for column, dummy in format_df.iteritems():
             for row, dummy in format_df.iterrows():
                 styled_cell = self._style(format_df.ix[row, column])
@@ -435,16 +481,20 @@ class RankFormatRule(object):
 
         return format_df
 
-    @staticmethod
-    def _style(cell_value):
+    def _set_max_range_rule(self, value):
+        value = value + 1
+        self.range_rule = list(Color("#E27171").range_to(Color("white"), value))
+
+    def _style(self, cell_value):
         if len(str(cell_value)) > 0:
             cell_value = int(cell_value)
-            color = RankFormatRule._RANGE_RULE[cell_value]
+            color = self.range_rule[cell_value]
             styled_cell = {"font_size": "12",
                            "bg_color": str(color),
                            "font_color": RankFormatRule._FONT_COLOR}
             return styled_cell
-        return ""
+        return np.nan
+
 
 def _create_df(input_file):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
@@ -471,11 +521,20 @@ def _validate_df(initial_df):
     if not sample_column:
         raise BaseException(msg)
 
-#TODO: (jebene) - edit this so that only columns with data are joined
 def _combine_style_dfs(dfs):
     df1, df2 = dfs
-    combined_df = df1.join(df2, how='outer')
+    original_columns = set(df1.columns.values).union(set(df2.columns.values))
+
+    cleaned_df1 = df1.dropna(1, how='all')
+    cleaned_df2 = df2.dropna(1, how='all')
+
+    combined_df = cleaned_df1.join(cleaned_df2, how='outer')
+    for column in original_columns:
+        if column not in list(combined_df.columns.values):
+            combined_df[column] = pd.Series()
+
     combined_df = combined_df.fillna("")
+
     return combined_df
 
 def _combine_dfs(dfs):
@@ -486,7 +545,7 @@ def _combine_dfs(dfs):
     summary_genes = set(summary_df.index.values)
     valid_genes = dbnsfp_genes.intersection(snpeff_genes)
     invalid_genes = summary_genes.difference(valid_genes)
- 
+
     summary_df = summary_df.drop(list(invalid_genes))
 
     combined_df = summary_df.join(dbnsfp_df, how='outer')
@@ -499,16 +558,24 @@ def _combine_dfs(dfs):
     return combined_df
 
 def _translate_to_excel(data_df, style_df, writer):
+    data_df = data_df.convert_objects(convert_numeric=True)
     worksheet_name = "gene_rollup"
     data_df.to_excel(writer, sheet_name=worksheet_name, index=False)
 
     workbook = writer.book
+    workbook.strings_to_numbers = True
     worksheet = writer.sheets[worksheet_name]
+    worksheet.strings_to_numbers = True
+
+#     header_format = workbook.add_format({"bold": True})
+#     header_format.set_rotation(90)
+#     for i, column in enumerate(data_df.columns.values):
+#         if re.search("dbNSFP.*rank", column):
+#             worksheet.write(0, i, column, {"bg_color": "orange")
 
     for i, (row, dummy) in enumerate(data_df.iterrows()):
         for j, (column, dummy) in enumerate(data_df.iteritems()):
             style = style_df.ix[row, column]
-
             if len(style) > 0 and column != _GENE_SYMBOL_OUTPUT_NAME:
                 cell_format = workbook.add_format(style)
                 worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
@@ -525,10 +592,11 @@ def _rollup(input_file, output_file):
     print "Starting Gene Rollup"
 
     initial_df = _create_df(input_file)
+
 #TODO: (jebene) add RankFormatRule() to dbNSFP and SnpEff -- it's reusing data_df in summarize() I think, so look into that
     annotations = [SummaryColumns(),
-                   dbNSFP([dbNSFPFormatRule()]),
-                   SnpEff([SnpEffFormatRule()])]
+                   dbNSFP([dbNSFPFormatRule(), RankFormatRule()]),
+                   SnpEff([SnpEffFormatRule(), RankFormatRule()])]
 
     annotation_dfs = OrderedDict()
     all_style_dfs = OrderedDict()
