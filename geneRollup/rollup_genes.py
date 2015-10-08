@@ -525,6 +525,42 @@ def _combine_dfs(dfs):
 
     return combined_df
 
+def _header_formats():
+    #pylint: disable=duplicate-key
+    header_formats = {r"gene symbol": {"align": "center",
+                                       "bold": True,
+                                       "border": True,
+                                       "align": "center"},
+                      r"dbNSFP\|overall damaging rank": {"bg_color": "#F8A049",
+                                                        "font_color": "white",
+                                                        "border": True,
+                                                        "rotation": 90,
+                                                        "align": "center"},
+                      r"dbNSFP\|damaging.*": {"bg_color": "#FBC692",
+                                             "border": True,
+                                             "rotation": 90,
+                                             "align": "center"},
+                      r"SnpEff\|overall impact rank": {"bg_color": "#4775A3",
+                                                      "font_color": "white",
+                                                      "border": True,
+                                                      "rotation": 90,
+                                                      "align": "center"},
+                      r"SnpEff\|.*(score|category).*": {"bg_color": "#6C91B5",
+                                                        "font_color": "white",
+                                                        "border": True,
+                                                        "rotation": 90,
+                                                        "align": "center"},
+                      r"SnpEff\|impact\|.*": {"bg_color": "#99C1D7",
+                                            "border": True,
+                                            "rotation": 90,
+                                            "align": "center"},
+                      r"(impacted samples|distinct loci|total mutations)":
+                            {"bg_color": "#F7F4FF",
+                             "border": True,
+                             "rotation": 90,
+                             "align": "center"}}
+    return header_formats
+
 def _translate_to_excel(data_df, style_df, writer):
     data_df = data_df.convert_objects(convert_numeric=True)
     worksheet_name = "gene_rollup"
@@ -535,11 +571,14 @@ def _translate_to_excel(data_df, style_df, writer):
     worksheet = writer.sheets[worksheet_name]
     worksheet.strings_to_numbers = True
 
-#     header_format = workbook.add_format({"bold": True})
-#     header_format.set_rotation(90)
-#     for i, column in enumerate(data_df.columns.values):
-#         if re.search("dbNSFP.*rank", column):
-#             worksheet.write(0, i, column, {"bg_color": "orange")
+    worksheet.set_column(0, 0, 20)
+    worksheet.set_column(1, len(list(data_df.columns.values)), 5)
+    for i, column in enumerate(data_df.columns.values):
+        for key in _header_formats():
+            if re.search(key, column):
+                cell_format = workbook.add_format(_header_formats()[key])
+                worksheet.write(0, i, column, cell_format)
+                break
 
     for i, (row, dummy) in enumerate(data_df.iterrows()):
         for j, (column, dummy) in enumerate(data_df.iteritems()):
@@ -551,9 +590,23 @@ def _translate_to_excel(data_df, style_df, writer):
     writer.save()
 
 def _sort_by_dbnsfp_rank(initial_df):
-    sorted_df = initial_df.sort(columns = [dbNSFP("").damaging_rank_column,
-                                           SnpEff("").impact_rank_column,
+    dbnsfp_rank_col = dbNSFP("").damaging_rank_column
+    snpeff_rank_col = SnpEff("").impact_rank_column
+
+    initial_df[dbnsfp_rank_col] = initial_df[dbnsfp_rank_col].replace("",
+                                                                      np.nan)
+    initial_df[snpeff_rank_col] = initial_df[snpeff_rank_col].replace("",
+                                                                      np.nan)
+
+    initial_df[dbnsfp_rank_col] = initial_df[dbnsfp_rank_col].apply(float)
+    initial_df[snpeff_rank_col] = initial_df[snpeff_rank_col].apply(float)
+
+    sorted_df = initial_df.sort(columns = [dbnsfp_rank_col,
+                                           snpeff_rank_col,
                                            _GENE_SYMBOL_OUTPUT_NAME])
+
+    sorted_df.fillna("", inplace=True)
+
     return sorted_df
 
 def _rollup(input_file, output_file):
