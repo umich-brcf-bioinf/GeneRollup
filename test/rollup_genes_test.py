@@ -749,12 +749,13 @@ HIGH2|1|1'''
 
     def test_format_style(self):
         input_string =\
-'''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
-MOD|mml|1
-HIGH|hhmlx|1
-NULL1||'''
-        data_df = dataframe(input_string)
+'''GENE_SYMBOL\tPATIENT_A\tSnpEff_overall_impact_rank
+MOD\tmml\t1
+HIGH\thhmlx\t1
+NULL1\t\t'''
+        data_df = dataframe(input_string, sep="\t")
         data_df = data_df.set_index(["GENE_SYMBOL"])
+
         rule = rollup_genes.SnpEffFormatRule()
         actual_df = rule.format(data_df)
 

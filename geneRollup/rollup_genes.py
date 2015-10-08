@@ -322,12 +322,7 @@ class SnpEffFormatRule(object):
 
     def __init__(self):
         self.rank_column = "SnpEff|overall impact rank"
-        self.score_column = "SnpEff|overall impact score"
         self.range_rule = list(Color("white").range_to(Color("blue"), 101))
-
-    def _reset_range_rule(self, max_color, max_value):
-        self.range_rule = list(Color("white").range_to(Color(max_color),
-                                                       max_value))
 
     def format(self, data_df):
         def _determine_format(cell_value):
@@ -336,28 +331,9 @@ class SnpEffFormatRule(object):
                     return letter
             return ""
 
-        def _determine_score_format(cell_value):
-            normalized = 1000*(cell_value-min_value)/(max_value-min_value)
-            if np.isnan(normalized):
-                return cell_value
-            else:
-                return int(normalized) #float?
-
         format_df = data_df.applymap(str)
-        score_series = format_df[self.score_column].apply(int)
-        format_df = format_df.drop(self.score_column, 1)
-
         format_df = format_df.applymap(_determine_format)
         format_df = format_df.applymap(self._style)
-
-        min_value = int(score_series.min())
-        max_value = int(score_series.max())
-
-        score_series = score_series.apply(_determine_score_format)
-        max_range_value = int(score_series.max())
-
-        self._reset_range_rule("blue", max_range_value + 1)
-        format_df[self.score_column] = score_series.apply(self._style_score)
 
         return format_df
 
@@ -395,10 +371,6 @@ class dbNSFPFormatRule(object):
         self.total_column = "dbNSFP|damaging total"
         self.range_rule = list(Color("white").range_to(Color("orange"), 101))
 
-    def _reset_range_rule(self, max_color, max_value):
-        self.range_rule = list(Color("white").range_to(Color(max_color),
-                                                       max_value))
-
     def format(self, data_df):
         def _determine_format(cell_value):
             normalized = 100*(cell_value-min_value)/(max_value-min_value)
@@ -408,7 +380,6 @@ class dbNSFPFormatRule(object):
                 return int(normalized)
 
         format_df = data_df.drop(self.rank_column, 1)
-        total_series = format_df[self.total_column].apply(int)
         format_df = format_df.drop(self.total_column, 1)
 
         format_df = format_df.replace("", np.nan)
@@ -419,12 +390,9 @@ class dbNSFPFormatRule(object):
 
         format_df = format_df.applymap(_determine_format)
         format_df[self.rank_column] = pd.Series()
+        format_df[self.total_column] = pd.Series()
 
         format_df = format_df.applymap(self._style)
-
-        max_range_value = int(total_series.max())
-        self._reset_range_rule("yellow", max_range_value + 1)
-        format_df[self.total_column] = total_series.apply(self._style)
 
         return format_df
 
