@@ -296,6 +296,7 @@ class SummaryColumns(object):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
         sample_df = sample_df.groupby(_GENE_SYMBOL).count()
+
         sample_df[sample_df > 0] = 1
 
         return sample_df.apply(sum, 1)
@@ -511,7 +512,7 @@ def _combine_dfs(dfs):
     dbnsfp_genes = set(dbnsfp_df.index.values)
     snpeff_genes = set(snpeff_df.index.values)
     summary_genes = set(summary_df.index.values)
-    valid_genes = dbnsfp_genes.intersection(snpeff_genes)
+    valid_genes = dbnsfp_genes.union(snpeff_genes)
     invalid_genes = summary_genes.difference(valid_genes)
 
     summary_df = summary_df.drop(list(invalid_genes))
