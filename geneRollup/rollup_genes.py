@@ -723,8 +723,8 @@ def _add_arg_parse(args):
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", help=("A tab-delimited file of variants x samples"))
     parser.add_argument("output_file", help=("A tab-delimited file of genes x samples"))
-    parser.add_argument("--sample_column_regex", help="Regex used to define the sample columns in the input file. Default is 'JQ_SUMMARY_SOM_COUNT.*'")
-    parser.add_argument("--gene_column_name", help="Name of gene symbol column in the output file. Default is 'SNPEFF_TOP_EFFECT_GENE_SYMBOL'")
+    parser.add_argument("--sample_column_regex", help="Regex used to define the sample columns in the input file. Default is '{}'".format(_SAMPLENAME_REGEX))
+    parser.add_argument("--gene_column_name", help="Name of gene symbol column in the output file. Default is '{}'".format(_GENE_SYMBOL))
     parser.add_argument("--tsv", action="store_true", help="Write to a tsv file rather than an xlsx file")
 
     return parser.parse_args(args)
