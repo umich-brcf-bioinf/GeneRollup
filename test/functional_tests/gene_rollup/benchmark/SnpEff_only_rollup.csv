@@ -1,0 +1,5 @@
+gene symbol	total impacted samples	distinct loci	total mutations	SnpEff|overall impact rank	SnpEff|overall impact score	SnpEff|impact category|HIGH	SnpEff|impact category|MODERATE	SnpEff|impact category|LOW	SnpEff|impact category|MODIFIER	SnpEff|impact|P1|TUMOR	SnpEff|impact|P2|TUMOR	SnpEff|impact|P3|TUMOR	SnpEff|impact|P4|TUMOR
+BRCA1	1	1	1	1.0	1000000000	1	0	0	0				h
+CREBBP	1	2	2	2.0	1001000	0	1	1	0		lm		
+TP53	1	1	1	3.0	1000	0	0	1	0				l
+EGFR	2	1	2	4.0	2	0	0	0	2		x		x

@@ -80,7 +80,7 @@ class GeneRollupTestCase(unittest.TestCase):
         self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
                             list(actual_df.columns.values))
 
-    def test_create_df_invalid(self):
+    def test_create_df_missingDbnsfpAndSnpeffNotOkay(self):
         input_string =\
 '''headerA\theaderB
 1\t2'''
@@ -89,13 +89,29 @@ class GeneRollupTestCase(unittest.TestCase):
                                 rollup_genes._create_df,
                                 StringIO(input_string))
 
+    def test_create_df_missingdbNsfpOkay(self):
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
+1\t2\t3'''
+        actual_df = rollup_genes._create_df(StringIO(input_string))
+        self.assertEquals(["GENE_SYMBOL", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
+                            list(actual_df.columns.values))
+
+    def test_create_df_missingSnpEffOkay(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT
+1\t2\t3'''
+        actual_df = rollup_genes._create_df(StringIO(input_string))
+        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT"],
+                            list(actual_df.columns.values))
+
     def test_create_df_missingSamples(self):
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tfoo
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSNPEFF_TOP_EFFECT_IMPACT
 1\t2\t3
 1\t2\t3'''
         self.assertRaisesRegexp(BaseException,
-                                    "Input file is missing required headers",
+                                    "Cannot determine samples from input file with supplied regex. Review input and try again",
                                     rollup_genes._create_df,
                                     StringIO(input_string))
 
@@ -1112,6 +1128,8 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected_file = os.path.join(module_testdir, "benchmark", "rollup.csv")
 
+            rollup_genes._DESIRED_ANNOTATIONS = set([rollup_genes._DBNSFP_COLUMN,
+                                                     rollup_genes._SNPEFF_COLUMN])
             rollup_genes._rollup(input_file, output_file)
 
             expected = open(expected_file).readlines()
@@ -1120,4 +1138,45 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
             print open(output_file).readlines()
             for i, actual in enumerate(open(output_file).readlines()):
                 self.assertEquals(expected[i], actual)
+
+    def test_rollup_genes_onlySnpEff(self):
+        with TempDirectory() as output_dir:
+            test_dir = os.path.dirname(os.path.realpath(__file__))
+
+            module_testdir = os.path.join(test_dir, "functional_tests", "gene_rollup")
+            input_file = os.path.join(module_testdir, "input", "SnpEff_only_input.csv")
+            output_file = os.path.join(output_dir.path, "rollup.csv")
+
+            expected_file = os.path.join(module_testdir, "benchmark", "SnpEff_only_rollup.csv")
+
+            rollup_genes._DESIRED_ANNOTATIONS = set([rollup_genes._SNPEFF_COLUMN])
+            rollup_genes._rollup(input_file, output_file)
+
+            expected = open(expected_file).readlines()
+
+            print expected
+            print open(output_file).readlines()
+            for i, actual in enumerate(open(output_file).readlines()):
+                self.assertEquals(expected[i], actual)
+
+    def test_rollup_genes_onlydbNSFP(self):
+        with TempDirectory() as output_dir:
+            test_dir = os.path.dirname(os.path.realpath(__file__))
+
+            module_testdir = os.path.join(test_dir, "functional_tests", "gene_rollup")
+            input_file = os.path.join(module_testdir, "input", "dbNSFP_only_input.csv")
+            output_file = os.path.join(output_dir.path, "rollup.csv")
+
+            expected_file = os.path.join(module_testdir, "benchmark", "dbNSFP_only_rollup.csv")
+
+            rollup_genes._DESIRED_ANNOTATIONS = set([rollup_genes._DBNSFP_COLUMN])
+            rollup_genes._rollup(input_file, output_file)
+
+            expected = open(expected_file).readlines()
+
+            print expected
+            print open(output_file).readlines()
+            for i, actual in enumerate(open(output_file).readlines()):
+                self.assertEquals(expected[i], actual)
+
 
