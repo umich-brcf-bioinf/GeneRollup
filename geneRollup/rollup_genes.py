@@ -76,10 +76,14 @@ class dbNSFP(object):
         initial_df.fillna(".", inplace=True)
         initial_df = initial_df[initial_df[self.damaging_column] != "."]
 
+        default = pd.options.mode.chained_assignment
+        pd.options.mode.chained_assignment = None
+
         initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(int)
         initial_df = initial_df[initial_df[self.damaging_column] > 0]
 
         initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(str)
+        pd.options.mode.chained_assignment = default
 
         return initial_df
 
@@ -88,7 +92,7 @@ class dbNSFP(object):
         initial_df = initial_df.applymap(str)
 
         for sample in sample_cols:
-            initial_df[sample][initial_df[sample] == '0'] = "."
+            initial_df[sample] = initial_df[sample].replace("0", ".")
 
             initial_df.fillna(".", inplace=True)
             initial_df[sample][initial_df[sample] != "."] = initial_df[self.damaging_column]
@@ -455,8 +459,8 @@ class RankFormatRule(object):
 
         for column, dummy in format_df.iteritems():
             for row, dummy in format_df.iterrows():
-                styled_cell = self._style(format_df.ix[row, column])
-                format_df.ix[row, column] = styled_cell
+                styled_cell = self._style(format_df.loc[row][column])
+                format_df.loc[row][column] = styled_cell
 
         return format_df
 
@@ -618,6 +622,10 @@ def _translate_to_excel(data_df, style_df, writer):
     worksheet.set_column(1, len(list(data_df.columns.values)), 5)
     for i, column in enumerate(data_df.columns.values):
         for key in _header_formats():
+            if re.search(dbNSFP("").damaging_total, column) or \
+                re.search(SnpEff("").impact_score_column, column):
+                worksheet.set_column(i, i, None, None, {"hidden": 1})
+
             if re.search(key, column):
                 cell_format = workbook.add_format(_header_formats()[key])
                 worksheet.write(0, i, column, cell_format)
