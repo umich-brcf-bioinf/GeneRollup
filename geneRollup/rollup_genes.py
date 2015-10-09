@@ -76,14 +76,15 @@ class dbNSFP(object):
         initial_df.fillna(".", inplace=True)
         initial_df = initial_df[initial_df[self.damaging_column] != "."]
 
+        #temporarily reset warning thresholds to prevent spurious warning in pandas
         default = pd.options.mode.chained_assignment
-        pd.options.mode.chained_assignment = None
-
-        initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(int)
-        initial_df = initial_df[initial_df[self.damaging_column] > 0]
-
-        initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(str)
-        pd.options.mode.chained_assignment = default
+        try:
+            pd.options.mode.chained_assignment = None
+            initial_df[self.damaging_column] = initial_df.ix[:,self.damaging_column].apply(int)
+            initial_df = initial_df[initial_df[self.damaging_column] > 0]
+            initial_df[self.damaging_column] = initial_df[self.damaging_column].apply(str)
+        finally:
+            pd.options.mode.chained_assignment = default
 
         return initial_df
 
