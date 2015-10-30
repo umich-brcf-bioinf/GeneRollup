@@ -2,18 +2,19 @@
 #pylint:disable=line-too-long, no-member
 import argparse
 from collections import OrderedDict
+from datetime import datetime
+import errno
+import os
 import re
 import sys
 
 from colour import Color
 
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 
 _SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
 _GENE_SYMBOL = "SNPEFF_TOP_EFFECT_GENE_SYMBOL"
-_XLSX = True
 
 _LOCI_COUNT = "distinct loci"
 _SAMPLE_COUNT = "total impacted samples"
@@ -25,10 +26,23 @@ _DESIRED_ANNOTATIONS = set()
 
 _GENE_SYMBOL_OUTPUT_NAME = "gene symbol"
 
+class RollupException(Exception):
+    """Base class for all run-time exceptions in this module."""
+    def __init__(self, msg, *args):
+        #pylint: disable=star-args
+        error_msg = msg.format(*[str(i) for i in args])
+        super(RollupException, self).__init__(error_msg)
+
+class UsageError(RollupException):
+    """Raised for malformed command or invalid arguments."""
+    def __init__(self, msg, *args):
+        super(UsageError, self).__init__(msg, *args)
+
 class dbNSFP(object):
     #pylint: disable=invalid-name, too-few-public-methods
-    def __init__(self, format_rules):
+    def __init__(self, format_rules, args):
         self.name = "dbNSFP"
+        self.args = args
         self.column_label = "damaging votes"
         self.damaging_column = _DBNSFP_COLUMN
         self.damaging_rank_column = "overall damaging rank"
@@ -61,9 +75,10 @@ class dbNSFP(object):
         return data_df, style_dfs
 
     def _remove_unnecessary_columns(self, initial_df):
-        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_cols = initial_df.filter(regex=self.args.sample_column_regex)
         required_columns = list(sample_cols.columns)
-        required_columns.extend([_GENE_SYMBOL, self.damaging_column])
+        required_columns.extend([self.args.gene_column_name,
+                                 self.damaging_column])
 
         condensed_df = pd.DataFrame()
         for col in initial_df.columns:
@@ -89,7 +104,7 @@ class dbNSFP(object):
         return initial_df
 
     def _build_gene_sample_damaging_votes(self, initial_df):
-        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_cols = initial_df.filter(regex=self.args.sample_column_regex).columns.values
         initial_df = initial_df.applymap(str)
 
         for sample in sample_cols:
@@ -107,7 +122,7 @@ class dbNSFP(object):
 
         damaging_votes_df = initial_df.convert_objects(convert_numeric=True)
         damaging_votes_df = damaging_votes_df.applymap(lambda x: x if x != "." else 0)
-        damaging_votes_df = damaging_votes_df.groupby(_GENE_SYMBOL).sum()
+        damaging_votes_df = damaging_votes_df.groupby(self.args.gene_column_name).sum()
         damaging_votes_df = damaging_votes_df.applymap(lambda x: x if x != 0 else ".")
         del damaging_votes_df[self.damaging_column]
 
@@ -128,7 +143,6 @@ class dbNSFP(object):
 
         return damaging_ranks_df
 
-
 class SnpEff(object):
     #pylint: disable=invalid-name, too-few-public-methods
     _RANK_SCORES = {"HIGH": 10**9,
@@ -141,8 +155,9 @@ class SnpEff(object):
                      "MODIFIER": "x",
                      ".": ""}
 
-    def __init__(self, format_rules):
+    def __init__(self, format_rules, args):
         self.name = "SnpEff"
+        self.args = args
         self.column_label = "impact"
         self.impact_column = _SNPEFF_COLUMN
         self.impact_rank_column = "overall impact rank"
@@ -166,9 +181,10 @@ class SnpEff(object):
         return data_df, style_dfs
 
     def _remove_unnecessary_columns(self, initial_df):
-        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX)
+        sample_cols = initial_df.filter(regex=self.args.sample_column_regex)
         required_columns = list(sample_cols.columns)
-        required_columns.extend([_GENE_SYMBOL, self.impact_column])
+        required_columns.extend([self.args.gene_column_name,
+                                 self.impact_column])
 
         condensed_df = pd.DataFrame()
         for col in initial_df.columns:
@@ -184,11 +200,13 @@ class SnpEff(object):
         return initial_df
 
     def _calculate_score(self, initial_df):
-        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_regex = self.args.sample_column_regex
+        sample_cols = initial_df.filter(regex=sample_regex).columns.values
         initial_df = initial_df.applymap(str)
 
         scored_df = pd.DataFrame()
-        scored_df[_GENE_SYMBOL] = initial_df[_GENE_SYMBOL]
+        gene_column = self.args.gene_column_name
+        scored_df[gene_column] = initial_df[gene_column]
 
         for sample in sample_cols:
             #set sample columns equal to impact column value
@@ -203,9 +221,9 @@ class SnpEff(object):
         initial_df.fillna("", inplace=True)
         scored_df.fillna(0, inplace=True)
 
-        score = scored_df.groupby(_GENE_SYMBOL).sum().apply(sum, 1)
+        score = scored_df.groupby(self.args.gene_column_name).sum().apply(sum,1)
         score = score.apply(int)
-        grouped_df = initial_df.groupby(_GENE_SYMBOL).sum()
+        grouped_df = initial_df.groupby(self.args.gene_column_name).sum()
         grouped_df = grouped_df[grouped_df.index != "."]
         grouped_df = grouped_df.applymap(lambda x: "".join(sorted(x)))
 
@@ -220,7 +238,8 @@ class SnpEff(object):
 
     def _get_impact_category_counts(self, initial_df):
         def _count_category(abbrev):
-            sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+            sample_regex = self.args.sample_column_regex
+            sample_cols = initial_df.filter(regex=sample_regex).columns.values
             temp_df = pd.DataFrame()
             for sample_col in sample_cols:
                 temp_df[sample_col] = initial_df[sample_col].apply(lambda x: len([i for i in x if i == abbrev]))
@@ -236,7 +255,8 @@ class SnpEff(object):
         return category_df
 
     def _rename_sample_columns(self, initial_df):
-        sample_cols = initial_df.filter(regex=_SAMPLENAME_REGEX).columns.values
+        sample_regex = self.args.sample_column_regex
+        sample_cols = initial_df.filter(regex=sample_regex).columns.values
         for sample in sample_cols:
             split_sample = sample.split("|")
             samp_suffix = "|".join(split_sample[1:])
@@ -288,12 +308,14 @@ class SnpEff(object):
 
 
 class SummaryColumns(object):
-    def __init__(self):
+    def __init__(self, args):
         self.name = "Summary Columns"
+        self.args = args
 
     def summarize(self, initial_df):
-        sample_df = initial_df.filter(regex=_SAMPLENAME_REGEX)
-        sample_df[_GENE_SYMBOL] = initial_df[_GENE_SYMBOL]
+        sample_df = initial_df.filter(regex=self.args.sample_column_regex)
+        gene_column = self.args.gene_column_name
+        sample_df[gene_column] = initial_df[gene_column]
 
         data_df = pd.DataFrame()
         data_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
@@ -307,25 +329,22 @@ class SummaryColumns(object):
 
         return data_df, style_dfs
 
-    @staticmethod
-    def calculate_total_samples(sample_df):
+    def calculate_total_samples(self, sample_df):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
-        sample_df = sample_df.groupby(_GENE_SYMBOL).count()
+        sample_df = sample_df.groupby(self.args.gene_column_name).count()
 
         sample_df[sample_df > 0] = 1
 
         return sample_df.apply(sum, 1)
 
-    @staticmethod
-    def calculate_total_loci(sample_df):
-        return sample_df.groupby(_GENE_SYMBOL).size()
+    def calculate_total_loci(self, sample_df):
+        return sample_df.groupby(self.args.gene_column_name).size()
 
-    @staticmethod
-    def calculate_total_mutations(sample_df):
+    def calculate_total_mutations(self, sample_df):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
-        grouped = sample_df.groupby(_GENE_SYMBOL)
+        grouped = sample_df.groupby(self.args.gene_column_name)
         return grouped.count().apply(sum, 1)
 
 
@@ -367,15 +386,15 @@ class SnpEffFormatRule(object):
                                          ._COLOR_MAP[cell_value]}
             return styled_cell
 
-    def _style_score(self, cell_value):
-        if np.isnan(cell_value):
-            return np.nan
-        else:
-            color = self.range_rule[cell_value]
-            styled_cell = {"font_size": "12",
-                           "bg_color": str(color),
-                           "font_color": SnpEffFormatRule._FONT_COLOR}
-            return styled_cell
+#     def _style_score(self, cell_value):
+#         if np.isnan(cell_value):
+#             return np.nan
+#         else:
+#             color = self.range_rule[cell_value]
+#             styled_cell = {"font_size": "12",
+#                            "bg_color": str(color),
+#                            "font_color": SnpEffFormatRule._FONT_COLOR}
+#             return styled_cell
 
 
 class dbNSFPFormatRule(object):
@@ -444,24 +463,33 @@ class RankFormatRule(object):
 
         format_df = data_df.copy()
 
+        rank_columns = {}
+
         for col in format_df.columns.values:
-            if re.search(dbNSFP("").damaging_rank_column, col) or \
-                re.search(SnpEff("").impact_rank_column, col):
+            if re.search(dbNSFP("","").damaging_rank_column, col) or \
+                re.search(SnpEff("","").impact_rank_column, col):
                 min_value = int(format_df[col].min(skipna=True))
                 max_value = int(format_df[col].max(skipna=True))
 
                 format_df.fillna("", inplace=True)
+                print "{} | rank_format | determining format".format(_now())
                 format_df[col] = format_df[col].apply(_determine_format)
+
+                rank_columns[col] = format_df[col]
+
             else:
                 format_df[col] = format_df[col].apply(lambda x: "")
 
         max_range_value = int(max(format_df.max(1)))
         self._set_max_range_rule(max_range_value)
 
-        for column, dummy in format_df.iteritems():
-            for row, dummy in format_df.iterrows():
-                styled_cell = self._style(format_df.loc[row][column])
-                format_df.loc[row][column] = styled_cell
+        format_df = pd.DataFrame(data=None,
+                                 columns=format_df.columns,
+                                 index=format_df.index)
+
+        #pylint: disable=unnecessary-lambda
+        for rank_col_name, rank_col in rank_columns.items():
+            format_df[rank_col_name] = rank_col.apply(lambda x: self._style(x))
 
         return format_df
 
@@ -480,13 +508,13 @@ class RankFormatRule(object):
         return np.nan
 
 
-def _create_df(input_file):
+def _create_df(input_file, args):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
-    _validate_df(initial_df)
+    _validate_df(initial_df, args)
 
     return initial_df
 
-def _validate_df(initial_df):
+def _validate_df(initial_df, args):
     header = set(initial_df.columns.values)
     missing_columns = []
 
@@ -497,24 +525,24 @@ def _validate_df(initial_df):
     elif _DBNSFP_COLUMN not in header and _SNPEFF_COLUMN not in header:
         missing_columns.extend([_DBNSFP_COLUMN, _SNPEFF_COLUMN])
 
-    if _GENE_SYMBOL not in header:
-        missing_columns.extend(_GENE_SYMBOL)
+    if args.gene_column_name not in header:
+        missing_columns.append(args.gene_column_name)
 
     msg = ("Input file is missing required headers ({}). "
            "Review input and try again.").format(missing_columns)
     if missing_columns:
-        raise BaseException(msg)
+        raise UsageError(msg)
 
     sample_column = 0
     for column in header:
-        if re.search(_SAMPLENAME_REGEX, column):
+        if re.search(args.sample_column_regex, column):
             sample_column = 1
             break
 
     msg = ("Cannot determine samples from input file with supplied regex. "
            "Review input and try again.")
     if not sample_column:
-        raise BaseException(msg)
+        raise UsageError(msg)
 
 def _combine_style_dfs(dfs):
     df1, df2 = dfs
@@ -559,42 +587,44 @@ def _combine_dfs(dfs):
 
 def _header_formats():
     #pylint: disable=duplicate-key
+    dbnsfp = dbNSFP("","")
+    snpeff = SnpEff("","")
     header_formats = {_GENE_SYMBOL_OUTPUT_NAME: {"align": "center",
                                                  "bold": True,
                                                  "border": True,
                                                  "align": "center"},
-                      dbNSFP("").damaging_rank_column: {"bg_color": "#F8A049",
-                                                        "font_color": "white",
-                                                        "border": True,
-                                                        "rotation": 90,
-                                                        "align": "center"},
-                      dbNSFP("").damaging_total: {"bg_color": "#FBC692",
+                      dbnsfp.damaging_rank_column: {"bg_color": "#F8A049",
+                                                    "font_color": "white",
+                                                    "border": True,
+                                                    "rotation": 90,
+                                                    "align": "center"},
+                      dbnsfp.damaging_total: {"bg_color": "#FBC692",
+                                              "border": True,
+                                              "rotation": 90,
+                                              "align": "center"},
+                      dbnsfp.column_label: {"bg_color": "#FBC692",
+                                            "border": True,
+                                            "rotation": 90,
+                                            "align": "center"},
+                      snpeff.impact_rank_column: {"bg_color": "#4775A3",
+                                                  "font_color": "white",
                                                   "border": True,
                                                   "rotation": 90,
                                                   "align": "center"},
-                      dbNSFP("").column_label: {"bg_color": "#FBC692",
-                                                "border": True,
-                                                "rotation": 90,
-                                                "align": "center"},
-                      SnpEff("").impact_rank_column: {"bg_color": "#4775A3",
-                                                      "font_color": "white",
-                                                      "border": True,
-                                                      "rotation": 90,
-                                                      "align": "center"},
-                      SnpEff("").impact_score_column: {"bg_color": "#6C91B5",
-                                                       "font_color": "white",
-                                                       "border": True,
-                                                       "rotation": 90,
-                                                       "align": "center"},
-                      SnpEff("").impact_category: {"bg_color": "#6C91B5",
+                      snpeff.impact_score_column: {"bg_color": "#6C91B5",
                                                    "font_color": "white",
                                                    "border": True,
                                                    "rotation": 90,
                                                    "align": "center"},
-                      SnpEff("").column_label + r"\|": {"bg_color": "#99C1D7",
-                                                        "border": True,
-                                                        "rotation": 90,
-                                                        "align": "center"},
+                      snpeff.impact_category: {"bg_color": "#6C91B5",
+                                               "font_color": "white",
+                                               "border": True,
+                                               "rotation": 90,
+                                               "align": "center"},
+                      snpeff.column_label + r"\|": {"bg_color": "#99C1D7",
+                                                    "border": True,
+                                                    "rotation": 90,
+                                                    "align": "center"},
                       _LOCI_COUNT: {"bg_color": "#F7F4FF",
                                     "border": True,
                                     "rotation": 90,
@@ -621,10 +651,11 @@ def _translate_to_excel(data_df, style_df, writer):
 
     worksheet.set_column(0, 0, 20)
     worksheet.set_column(1, len(list(data_df.columns.values)), 5)
+
     for i, column in enumerate(data_df.columns.values):
         for key in _header_formats():
-            if re.search(dbNSFP("").damaging_total, column) or \
-                re.search(SnpEff("").impact_score_column, column):
+            if re.search(dbNSFP("","").damaging_total, column) or \
+                re.search(SnpEff("","").impact_score_column, column):
                 worksheet.set_column(i, i, None, None, {"hidden": 1})
 
             if re.search(key, column):
@@ -632,18 +663,27 @@ def _translate_to_excel(data_df, style_df, writer):
                 worksheet.write(0, i, column, cell_format)
                 break
 
+#     for j, (column, data_series) in enumerate(data_df.iteritems()):
+#         for i, row in enumerate(data_series.index.values):
+#             style = style_df.ix[row, column]
+#             if style and column != _GENE_SYMBOL_OUTPUT_NAME:
+#                 cell_format = workbook.add_format(style)
+#                 worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
     for i, (row, dummy) in enumerate(data_df.iterrows()):
         for j, (column, dummy) in enumerate(data_df.iteritems()):
             style = style_df.ix[row, column]
-            if len(style) > 0 and column != _GENE_SYMBOL_OUTPUT_NAME:
+            if style and column != _GENE_SYMBOL_OUTPUT_NAME:
                 cell_format = workbook.add_format(style)
                 worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
+
 
     writer.save()
 
 def _sort_by_dbnsfp_rank(initial_df):
-    dbnsfp_rank_col = "|".join([dbNSFP("").name, dbNSFP("").damaging_rank_column])
-    snpeff_rank_col = "|".join([SnpEff("").name, SnpEff("").impact_rank_column])
+    dbnsfp = dbNSFP("","")
+    snpeff = SnpEff("","")
+    dbnsfp_rank_col = "|".join([dbnsfp.name, dbnsfp.damaging_rank_column])
+    snpeff_rank_col = "|".join([snpeff.name, snpeff.impact_rank_column])
 
     sort_order = []
     try:
@@ -669,21 +709,22 @@ def _sort_by_dbnsfp_rank(initial_df):
 
     return sorted_df
 
-def _rollup(input_file, output_file):
-    print "Starting Gene Rollup"
-    initial_df = _create_df(input_file)
+def _rollup(args):
+    print "{} | Starting Gene Rollup".format(_now())
+    initial_df = _create_df(args.input_file, args)
 
-    annotations = [SummaryColumns()]
+    annotations = [SummaryColumns(args)]
     if _DBNSFP_COLUMN in _DESIRED_ANNOTATIONS:
-        annotations.append(dbNSFP([dbNSFPFormatRule(), RankFormatRule()]))
+        annotations.append(dbNSFP([dbNSFPFormatRule(), RankFormatRule()], args))
     if _SNPEFF_COLUMN in _DESIRED_ANNOTATIONS:
-        annotations.append(SnpEff([SnpEffFormatRule(), RankFormatRule()]))
+        annotations.append(SnpEff([SnpEffFormatRule(), RankFormatRule()], args))
 
     annotation_dfs = OrderedDict()
     all_style_dfs = OrderedDict()
 
     for annotation in annotations:
-        print "Generating {} rollup information".format(annotation.name)
+        print "{} | Generating {} rollup information".format(_now(),
+                                                             annotation.name)
         summarized_df, style_dfs = annotation.summarize(initial_df)
         annotation_dfs[annotation.name] = summarized_df
         if len(style_dfs) == 2:
@@ -699,49 +740,63 @@ def _rollup(input_file, output_file):
     combined_style_df = _combine_dfs(all_style_dfs)
     combined_style_df = combined_style_df.reset_index()
 
-    if _XLSX:
+    print "{} | Writing to output file [{}]".format(_now(), args.output_file)
+
+    if args.tsv:
+        sorted_df.to_csv(args.output_file, sep="\t", index=False)
+    else:
         try:
-            writer = pd.ExcelWriter(output_file, engine="xlsxwriter")
+            writer = pd.ExcelWriter(args.output_file, engine="xlsxwriter")
             _translate_to_excel(sorted_df, combined_style_df, writer)
 
         except ValueError:
             msg = ("Unable to write [{}] to an Excel file. Review inputs and "
-                   "try again.").format(output_file)
-            raise BaseException(msg)
-    else:
-        sorted_df.to_csv(output_file, sep="\t", index=False)
+                   "try again.").format(args.output_file)
+            raise RollupException(msg)
 
-    print "Wrote to [{}]".format(output_file)
-    print "Done."
+    print "{} | Wrote to [{}]".format(_now(),
+                                      args.output_file)
+    print "{} | Done.".format(_now())
 
-def _change_global_variables(args):
-    #pylint: disable=global-statement
-    global _SAMPLENAME_REGEX
-    if args.sample_column_regex:
-        _SAMPLENAME_REGEX = args.sample_column_regex
+def _create_output_dir(output_file):
+    try:
+        _makepath(output_file)
+    except OSError:
+        parent_dir = os.path.dirname(output_file)
+        raise UsageError(("GeneRollup cannot write to output directory "
+                          "[{}]. Review inputs and try again.")\
+                          .format(parent_dir))
 
-    global _GENE_SYMBOL
-    if args.gene_column_name:
-        _GENE_SYMBOL = args.gene_column_name
+def _makepath(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
 
-    global _XLSX
-    if args.tsv:
-        _XLSX = False
+def _now():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def _add_arg_parse(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input_file", help=("A tab-delimited file of variants x samples"))
-    parser.add_argument("output_file", help=("A tab-delimited file of genes x samples"))
-    parser.add_argument("--sample_column_regex", help="Regex used to define the sample columns in the input file. Default is '{}'".format(_SAMPLENAME_REGEX))
-    parser.add_argument("--gene_column_name", help="Name of gene symbol column in the output file. Default is '{}'".format(_GENE_SYMBOL))
-    parser.add_argument("--tsv", action="store_true", help="Write to a tsv file rather than an xlsx file")
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("input_file", help=("A TSV file of variants x samples"))
+    parser.add_argument("output_file", help=("By default, an XLSX file of genes x samples. Can be a TSV file with --tsv"))
+    parser.add_argument("--sample_column_regex", default=_SAMPLENAME_REGEX, help="Regex used to define the sample columns in the input file")
+    parser.add_argument("--gene_column_name", default=_GENE_SYMBOL, help="Name of gene symbol column in the output file")
+    parser.add_argument("--tsv", action="store_true", default=False, help="Write to a tsv file rather than an xlsx file")
 
     return parser.parse_args(args)
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
-    _change_global_variables(args)
-    _rollup(args.input_file, args.output_file)
+#     TODO: (jebene) make this work
+#     _create_output_dir(args.output_file)
+
+    try:
+        _rollup(args)
+    except UsageError as error:
+        print "{} | Usage Error: {}".format(_now(), error.message)
 
 if __name__ == "__main__":
     main()
