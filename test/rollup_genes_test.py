@@ -209,6 +209,30 @@ CREBBP\thh'''
                                            "expected_output.xlsx")
             self.assertEquals(True, filecmp.cmp(expected_output, output_file))
 
+    def test_reset_style_gene_values(self):
+        data_string =\
+'''gene symbol|PATIENT_A_SnpEff
+BRCA1|{"foo": "bar"}
+TANK|{"foo": "bar"}
+CREBBP|{"foo": "bar"}'''
+        data_df = dataframe(data_string)
+        actual = rollup_genes._reset_style_gene_values(data_df)
+        actual = actual.applymap(str)
+
+        expected_string =\
+'''gene symbol|PATIENT_A_SnpEff
+{}|{"foo": "bar"}
+{}|{"foo": "bar"}
+{}|{"foo": "bar"}'''
+        expected = dataframe(expected_string)
+
+        self.assertEquals(list(expected["gene symbol"].values),
+                          list(actual["gene symbol"].values))
+
+        self.assertEquals(list(expected["PATIENT_A_SnpEff"].values),
+                          list(actual["PATIENT_A_SnpEff"].values))
+
+
 class dbNSFPTestCase(unittest.TestCase):
     def setUp(self):
         rollup_genes._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"

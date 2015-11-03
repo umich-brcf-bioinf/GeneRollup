@@ -472,7 +472,6 @@ class RankFormatRule(object):
                 max_value = int(format_df[col].max(skipna=True))
 
                 format_df.fillna("", inplace=True)
-                print "{} | rank_format | determining format".format(_now())
                 format_df[col] = format_df[col].apply(_determine_format)
 
                 rank_columns[col] = format_df[col]
@@ -640,7 +639,10 @@ def _header_formats():
     return header_formats
 
 def _translate_to_excel(data_df, style_df, writer):
+    gene_symbols = data_df[_GENE_SYMBOL_OUTPUT_NAME].values
     data_df = data_df.convert_objects(convert_numeric=True)
+    data_df[_GENE_SYMBOL_OUTPUT_NAME] = gene_symbols
+
     worksheet_name = "gene_rollup"
     data_df.to_excel(writer, sheet_name=worksheet_name, index=False)
 
@@ -672,7 +674,7 @@ def _translate_to_excel(data_df, style_df, writer):
     for i, (row, dummy) in enumerate(data_df.iterrows()):
         for j, (column, dummy) in enumerate(data_df.iteritems()):
             style = style_df.ix[row, column]
-            if style and column != _GENE_SYMBOL_OUTPUT_NAME:
+            if style:
                 cell_format = workbook.add_format(style)
                 worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
 
@@ -709,6 +711,13 @@ def _sort_by_dbnsfp_rank(initial_df):
 
     return sorted_df
 
+def _reset_style_gene_values(combined_style_df):
+    original_values = combined_style_df[_GENE_SYMBOL_OUTPUT_NAME]
+    new_values = [{} for dummy in original_values]
+    combined_style_df[_GENE_SYMBOL_OUTPUT_NAME] = new_values
+
+    return combined_style_df
+
 def _rollup(args):
     print "{} | Starting Gene Rollup".format(_now())
     initial_df = _create_df(args.input_file, args)
@@ -739,6 +748,7 @@ def _rollup(args):
 
     combined_style_df = _combine_dfs(all_style_dfs)
     combined_style_df = combined_style_df.reset_index()
+    altered_style_df = _reset_style_gene_values(combined_style_df)
 
     print "{} | Writing to output file [{}]".format(_now(), args.output_file)
 
@@ -747,7 +757,7 @@ def _rollup(args):
     else:
         try:
             writer = pd.ExcelWriter(args.output_file, engine="xlsxwriter")
-            _translate_to_excel(sorted_df, combined_style_df, writer)
+            _translate_to_excel(sorted_df, altered_style_df, writer)
 
         except ValueError:
             msg = ("Unable to write [{}] to an Excel file. Review inputs and "
