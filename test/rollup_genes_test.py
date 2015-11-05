@@ -36,13 +36,13 @@ class MockFormatRule(object):
         return self.format_df
 
 class GeneRollupTestCase(unittest.TestCase):
-    def setUp(self):
-        self.saved_stdout = sys.stdout
-        self.out = StringIO()
-        sys.stdout = self.out
+#     def setUp(self):
+#         self.saved_stdout = sys.stdout
+#         self.out = StringIO()
+#         sys.stdout = self.out
 
-    def tearDown(self):
-        sys.stdout = self.saved_stdout
+#     def tearDown(self):
+#         sys.stdout = self.saved_stdout
 
     def test_create_df(self):
         input_string =\
@@ -122,6 +122,26 @@ class GeneRollupTestCase(unittest.TestCase):
                                 rollup_genes._create_df,
                                 StringIO(input_string),
                                 args)
+
+    #TODO: (jebene) I can't figure out how to initialize this as having null values
+    def xtest_create_df_removesIntergenicVariants(self):
+        input_string =\
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
+BRCA1\t2\t3
+0\t4\t5
+6\t7\t8'''
+        input_string = input_string.replace("0", numpy.nan)
+        args = Namespace(input_file="",
+                         output_file="",
+                         sample_column_regex=rollup_genes._SAMPLENAME_REGEX,
+                         gene_column_name="GENE_SYMBOL",
+                         tsv=False)
+
+        actual_df = rollup_genes._create_df(StringIO(input_string), args)
+
+        self.assertEquals(["GENE_SYMBOL", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
+                            list(actual_df.columns.values))
+        self.assertEquals(["BRCA1", "6"], list(actual_df["GENE_SYMBOL"].values))
 
     def test_sort_by_dbnsfp_rank(self):
         input_string =\
@@ -469,8 +489,11 @@ CREBBP\t2\t0\t.'''
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         input_string =\
 '''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+TANK\t2\t.\t1
 BRCA1\t5\t.\t1
-CREBBP\t5\t1\t.'''
+EGFR\t5\t.\t1
+CREBBP\t5\t1\t.
+BRCA2\t13\t.\t1'''
         input_df = dataframe(input_string, sep="\t")
         formatRule = MockFormatRule(FORMAT_DF)
 
@@ -484,8 +507,8 @@ CREBBP\t5\t1\t.'''
 
         damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
         ranked_df = dbNSFP._build_damaging_ranks(damaging_votes_df)
-        self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals([1, 1], list(ranked_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals(["BRCA1", "BRCA2", "CREBBP", "EGFR", "TANK"], list(ranked_df.index.values))
+        self.assertEquals([2, 1, 2, 2, 5], list(ranked_df["dbNSFP|overall damaging rank"].values))
 
 class SnpEffTestCase(unittest.TestCase):
     def setUp(self):
@@ -778,12 +801,14 @@ geneE\t20'''
 
         self.assertEquals(["5", "3", "2", "4", "1"], list(ranked_df["SnpEff|overall impact rank"].values))
 
-
     def test_calculate_rank_tie(self):
         input_string =\
 '''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
 CREBBP\tm\t.\t1
-BRCA1\t.\tm\t1'''
+TANK\tm\t.\t3
+EGFR\tm\t.\t3
+BRCA2\tm\t.\t3
+BRCA1\t.\tm\t12'''
         input_df = dataframe(input_string, sep="\t")
 
         args = Namespace(input_file="",
@@ -797,8 +822,8 @@ BRCA1\t.\tm\t1'''
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         ranked_df = SnpEff._calculate_rank(grouped_df)
 
-        self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals(["1", "1"], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["BRCA1", "BRCA2", "CREBBP", "EGFR", "TANK"], list(ranked_df.index.values))
+        self.assertEquals(["1", "2", "5", "2", "2"], list(ranked_df["SnpEff|overall impact rank"].values))
 
     def test_change_col_order(self):
         input_string =\
@@ -1203,6 +1228,26 @@ GENE3\t6'''
                                   {"font_size": "12", "bg_color": "white", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
 
+    def test_format_styleAllTies(self):
+        input_string =\
+'''GENE_SYMBOL\tdbNSFP|overall damaging rank
+GENE1\t1
+GENE2\t1
+GENE3\t1'''
+        data_df = dataframe(input_string, sep="\t")
+        data_df = data_df.set_index(["GENE_SYMBOL"])
+        rule = rollup_genes.RankFormatRule()
+        actual_df = rule.format(data_df)
+
+        expected_index = ["GENE1", "GENE2", "GENE3"]
+        self.assertEquals(expected_index, list(actual_df.index))
+
+        expected_patient_cells = [numpy.nan,
+                                  numpy.nan,
+                                  numpy.nan,]
+        self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
+
+
     def test_format_standalone(self):
         input_string =\
 '''GENE_SYMBOL\tSnpEff|overall impact rank
@@ -1284,7 +1329,6 @@ GENE3\t31\t100'''
 
         self.assertEquals(list([list(i) for i in expected_df.values]),
                           list([list(i) for i in actual_df.values]))
-
 
     def test_style_lightest(self):
         cell_value = "100"

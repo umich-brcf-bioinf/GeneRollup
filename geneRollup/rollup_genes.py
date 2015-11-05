@@ -132,12 +132,12 @@ class dbNSFP(object):
         damaging_rank_name = "|".join([self.name, self.damaging_rank_column])
         total_damaging_name = "|".join([self.name, self.damaging_total])
 
-        damaging_votes_df = damaging_votes_df.filter(regex="dbNSFP.*TUMOR")
         damaging_ranks_df = pd.DataFrame()
         damaging_ranks_df[total_damaging_name] = damaging_votes_df.sum(axis=1, skipna=True)
         damaging_ranks_df[total_damaging_name].fillna(0, inplace=True)
 
-        damaging_ranks_df[damaging_rank_name] = damaging_ranks_df[total_damaging_name].rank(ascending=False)
+        damaging_ranks_df[damaging_rank_name] = damaging_ranks_df[total_damaging_name].rank(ascending=False,
+                                                                                            method="min")
         damaging_ranks_df[damaging_rank_name] = damaging_ranks_df[damaging_rank_name].apply(np.floor)
         damaging_ranks_df = damaging_ranks_df.ix[:,[damaging_rank_name, total_damaging_name]]
 
@@ -274,7 +274,8 @@ class SnpEff(object):
 
         category_df = initial_df
         category_df[impact_score_name] = category_df[impact_score_name].apply(int)
-        category_df[impact_rank_name] = category_df[impact_score_name].rank(ascending=0, method="min")
+        category_df[impact_rank_name] = category_df[impact_score_name].rank(ascending=False,
+                                                                            method="min")
         category_df[impact_rank_name] = category_df[impact_rank_name].apply(int)
         category_df = category_df.applymap(str)
 
@@ -471,16 +472,23 @@ class RankFormatRule(object):
                 min_value = int(format_df[col].min(skipna=True))
                 max_value = int(format_df[col].max(skipna=True))
 
-                format_df.fillna("", inplace=True)
-                format_df[col] = format_df[col].apply(_determine_format)
+                if max_value - min_value > 0:
+                    format_df.fillna("", inplace=True)
+                    format_df[col] = format_df[col].apply(_determine_format)
 
-                rank_columns[col] = format_df[col]
+                    rank_columns[col] = format_df[col]
+
+                else:
+                    format_df[col] = format_df[col].apply(lambda x: "")
 
             else:
                 format_df[col] = format_df[col].apply(lambda x: "")
 
-        max_range_value = int(max(format_df.max(1)))
-        self._set_max_range_rule(max_range_value)
+        try:
+            max_range_value = int(max(format_df.max(1)))
+            self._set_max_range_rule(max_range_value)
+        except ValueError:
+            pass
 
         format_df = pd.DataFrame(data=None,
                                  columns=format_df.columns,
@@ -510,6 +518,7 @@ class RankFormatRule(object):
 def _create_df(input_file, args):
     initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
     _validate_df(initial_df, args)
+    initial_df = initial_df[pd.notnull(initial_df[_GENE_SYMBOL])]
 
     return initial_df
 
@@ -665,12 +674,7 @@ def _translate_to_excel(data_df, style_df, writer):
                 worksheet.write(0, i, column, cell_format)
                 break
 
-#     for j, (column, data_series) in enumerate(data_df.iteritems()):
-#         for i, row in enumerate(data_series.index.values):
-#             style = style_df.ix[row, column]
-#             if style and column != _GENE_SYMBOL_OUTPUT_NAME:
-#                 cell_format = workbook.add_format(style)
-#                 worksheet.write(i + 1, j, data_df.ix[row, column], cell_format)
+    print "{} | Writing data to an Excel file".format(_now())
     for i, (row, dummy) in enumerate(data_df.iterrows()):
         for j, (column, dummy) in enumerate(data_df.iteritems()):
             style = style_df.ix[row, column]
@@ -719,8 +723,8 @@ def _reset_style_gene_values(combined_style_df):
     return combined_style_df
 
 def _rollup(args):
-    print "{} | Starting Gene Rollup".format(_now())
     initial_df = _create_df(args.input_file, args)
+    print "{} | Starting Gene Rollup".format(_now())
 
     annotations = [SummaryColumns(args)]
     if _DBNSFP_COLUMN in _DESIRED_ANNOTATIONS:
