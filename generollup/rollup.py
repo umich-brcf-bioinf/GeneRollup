@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 #pylint:disable=line-too-long, no-member
+from __future__ import absolute_import
+
 import argparse
 from collections import OrderedDict
 from datetime import datetime
@@ -12,6 +14,8 @@ from colour import Color
 
 import numpy as np
 import pandas as pd
+
+from generollup import __version__
 
 _SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
 _GENE_SYMBOL = "SNPEFF_TOP_EFFECT_GENE_SYMBOL"
@@ -795,11 +799,24 @@ def _now():
 def _add_arg_parse(args):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("input_file", help=("A TSV file of variants x samples"))
-    parser.add_argument("output_file", help=("By default, an XLSX file of genes x samples. Can be a TSV file with --tsv"))
-    parser.add_argument("--sample_column_regex", default=_SAMPLENAME_REGEX, help="Regex used to define the sample columns in the input file")
-    parser.add_argument("--gene_column_name", default=_GENE_SYMBOL, help="Name of gene symbol column in the output file")
-    parser.add_argument("--tsv", action="store_true", default=False, help="Write to a tsv file rather than an xlsx file")
-
+    parser.add_argument("output_file",
+                        help=("By default, an XLSX file of genes x samples. "
+                              "Can be a TSV file with --tsv"))
+    parser.add_argument("--sample_column_regex",
+                        default=_SAMPLENAME_REGEX,
+                        help=("Regex used to define the sample columns in the "
+                              "input file"))
+    parser.add_argument("--gene_column_name",
+                        default=_GENE_SYMBOL,
+                        help="Name of gene symbol column in the output file")
+    parser.add_argument("--tsv",
+                        action="store_true",
+                        default=False,
+                        help="Write to a tsv file rather than an xlsx file")
+    parser.add_argument("--version",
+                        "-V",
+                        action="version",
+                        version=__version__)
     return parser.parse_args(args)
 
 def main():
