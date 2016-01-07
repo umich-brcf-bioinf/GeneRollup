@@ -7,7 +7,7 @@ import unittest
 
 from testfixtures import TempDirectory
 
-import geneRollup.rollup_genes as rollup_genes
+import generollup.rollup_genes as rollup_genes
 import pandas as pd
 
 def dataframe(input_data, sep="|", index_col=None):
