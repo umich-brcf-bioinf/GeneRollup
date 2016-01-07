@@ -12,7 +12,6 @@ before_script:
 
 script: 
     - nosetests --with-coverage --verbose --cover-package=generollup
-    - nosetests examples
 
 after_success:
     - coveralls
