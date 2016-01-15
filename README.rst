@@ -1,4 +1,4 @@
-====== 
+==========
 GeneRollup
 ==========
 
@@ -29,6 +29,11 @@ Rollup a tab-separated file of variants
 
 The input file has to have been annotated by either dbNSFP, SnpEff, or both. By
 default, the samples are determined based on a prefix added by Jacquard.
+
+
+For help and a description of command-line options, run:
+
+   $ rollup -h
 
 ====
 
