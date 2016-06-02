@@ -536,7 +536,7 @@ class RankFormatRule(object):
 
 
 def _create_df(input_file, args):
-    initial_df = pd.read_csv(input_file, sep='\t', header=False, dtype='str')
+    initial_df = pd.read_csv(input_file, sep='\t', header=0, dtype='str')
     _validate_df(initial_df, args)
     initial_df = initial_df[pd.notnull(initial_df[_GENE_SYMBOL])]
 
