@@ -823,12 +823,18 @@ def _add_arg_parse(args):
                         help=("Regex used to define the sample columns in the "
                               "input file"))
     parser.add_argument("--gene_column_name",
-                        default=_GENE_SYMBOL,
+                        default=_GENE_SYMBOL_OUTPUT_NAME,
                         help="Name of gene symbol column in the output file")
     parser.add_argument("--tsv",
                         action="store_true",
                         default=False,
                         help="Write to a tsv file rather than an xlsx file")
+    parser.add_argument("--input_gene_column_name",
+                        default=_GENE_SYMBOL,
+                        help="Name of gene symbol column in the input file")
+    parser.add_argument("--input_dbnsfp_column_name",
+                        default=_DBNSFP_COLUMN,
+                        help="Name of dbNSFP damaging count column in the input file")
     parser.add_argument("--version",
                         "-V",
                         action="version",
@@ -837,8 +843,10 @@ def _add_arg_parse(args):
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
-#     TODO: (jebene) make this work
-#     _create_output_dir(args.output_file)
+    global _GENE_SYMBOL
+    global _DBNSFP_COLUMN
+    _GENE_SYMBOL = args.input_gene_column_name
+    _DBNSFP_COLUMN = args.input_dbnsfp_column_name
 
     try:
         _rollup(args)
