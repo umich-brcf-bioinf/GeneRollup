@@ -1,10 +1,6 @@
 Changelog
 =========
 
-x.x.x (mm/dd/yyyy)
---------------
-- 
-
 0.2.1 (11/8/2017)
 --------------
 - Added command line arg to specify SNPEff Impact column
