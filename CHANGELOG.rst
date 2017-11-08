@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.2.1 (11/8/2017)
+--------------
+- Added command line arg to specify SNPEff Impact column
+
 0.2 (1/7/2016)
 --------------
 - Re-implementated earlier prototype to modularized functionality and tests
