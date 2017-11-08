@@ -128,7 +128,7 @@ class dbNSFP(object):
         initial_df = initial_df.applymap(str)
 
         for sample in sample_cols:
-            initial_df[sample] = initial_df[sample].replace("0", ".")
+            initial_df[sample] = initial_df[sample].replace("^0|0/0$", ".", regex=True)
 
             initial_df.fillna(".", inplace=True)
             initial_df[sample][initial_df[sample] != "."] = initial_df[self.damaging_column]
@@ -230,6 +230,7 @@ class SnpEff(object):
         for sample in sample_cols:
             #set sample columns equal to impact column value
             initial_df[sample][initial_df[sample] == '0'] = "."
+            initial_df[sample][initial_df[sample] == '0/0'] = "."
 
             initial_df.fillna(".", inplace=True)
             initial_df[sample][initial_df[sample] != "."] = initial_df[self.impact_column]
@@ -351,6 +352,7 @@ class SummaryColumns(object):
     def calculate_total_samples(self, sample_df):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
+        sample_df[sample_df == '0/0'] = np.nan
         sample_df = sample_df.groupby(self.args.gene_column_name).count()
 
         sample_df[sample_df > 0] = 1
@@ -363,6 +365,7 @@ class SummaryColumns(object):
     def calculate_total_mutations(self, sample_df):
         sample_df[sample_df == '.'] = np.nan
         sample_df[sample_df == '0'] = np.nan
+        sample_df[sample_df == '0/0'] = np.nan
         grouped = sample_df.groupby(self.args.gene_column_name)
         return grouped.count().apply(sum, 1)
 
