@@ -74,6 +74,7 @@ class GeneRollupTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
@@ -89,6 +90,7 @@ class GeneRollupTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         self.assertRaisesRegexp(rollup.UsageError,
@@ -105,6 +107,7 @@ class GeneRollupTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
@@ -120,6 +123,7 @@ class GeneRollupTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
@@ -136,6 +140,7 @@ class GeneRollupTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         self.assertRaisesRegexp(rollup.UsageError,
@@ -291,6 +296,7 @@ class dbNSFPTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -312,7 +318,8 @@ class dbNSFPTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX)
+                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         )
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
 
@@ -339,6 +346,7 @@ CREBBP\t3\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -376,6 +384,7 @@ CREBBP\t2\t0\t\t'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -412,6 +421,7 @@ BRCA1\t1\t1\t\t1'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -439,6 +449,7 @@ CREBBP\t3\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule1, formatRule2], args)
@@ -548,6 +559,7 @@ class SnpEffTestCase(unittest.TestCase):
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         snpEff = rollup.SnpEff([formatRule], args)
@@ -598,6 +610,7 @@ CREBBP\tMODIFIER\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         snpEff = rollup.SnpEff([formatRule], args)
@@ -643,6 +656,7 @@ CREBBP|2|0|0|0|0|0||'''.replace("|", "\t")
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         snpEff = rollup.SnpEff([formatRule], args)
@@ -687,6 +701,7 @@ CREBBP|1|0|0|0|0|0||'''.replace("|", "\t")
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         snpEff = rollup.SnpEff([formatRule], args)
@@ -714,6 +729,7 @@ CREBBP\tHIGH\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         snpEff = rollup.SnpEff([formatRule1, formatRule2], args)
@@ -743,6 +759,7 @@ CREBBP\tMODERATE\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         SnpEff = rollup.SnpEff([MockFormatRule], args)
@@ -888,6 +905,7 @@ CREBBP\t0\t.'''
                          output_file="",
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
 
         SummaryColumns = rollup.SummaryColumns(args)
@@ -1418,6 +1436,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
                          output_file=output_file,
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=True)
 
             rollup._rollup(args)
@@ -1445,6 +1464,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
                          output_file=output_file,
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=True)
 
             rollup._rollup(args)
@@ -1472,6 +1492,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
                          output_file=output_file,
                          sample_column_regex=rollup._SAMPLENAME_REGEX,
                          gene_column_name=rollup._GENE_SYMBOL,
+                         input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=True)
 
             rollup._rollup(args)

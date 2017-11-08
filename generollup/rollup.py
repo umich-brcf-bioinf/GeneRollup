@@ -97,7 +97,7 @@ class dbNSFP(object):
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols = initial_df.filter(regex=self.args.sample_column_regex)
         required_columns = list(sample_cols.columns)
-        required_columns.extend([self.args.gene_column_name,
+        required_columns.extend([self.args.input_gene_column_name,
                                  self.damaging_column])
 
         condensed_df = pd.DataFrame()
@@ -203,7 +203,7 @@ class SnpEff(object):
     def _remove_unnecessary_columns(self, initial_df):
         sample_cols = initial_df.filter(regex=self.args.sample_column_regex)
         required_columns = list(sample_cols.columns)
-        required_columns.extend([self.args.gene_column_name,
+        required_columns.extend([self.args.input_gene_column_name,
                                  self.impact_column])
 
         condensed_df = pd.DataFrame()
@@ -225,8 +225,7 @@ class SnpEff(object):
         initial_df = initial_df.applymap(str)
 
         scored_df = pd.DataFrame()
-        gene_column = self.args.gene_column_name
-        scored_df[gene_column] = initial_df[gene_column]
+        scored_df[self.args.gene_column_name] = initial_df[self.args.input_gene_column_name]
 
         for sample in sample_cols:
             #set sample columns equal to impact column value
@@ -243,7 +242,7 @@ class SnpEff(object):
 
         score = scored_df.groupby(self.args.gene_column_name).sum().apply(sum,1)
         score = score.apply(int)
-        grouped_df = initial_df.groupby(self.args.gene_column_name).sum()
+        grouped_df = initial_df.groupby(self.args.input_gene_column_name).sum()
         grouped_df = grouped_df[grouped_df.index != "."]
         grouped_df = grouped_df.applymap(lambda x: "".join(sorted(x)))
 
@@ -335,8 +334,7 @@ class SummaryColumns(object):
 
     def summarize(self, initial_df):
         sample_df = initial_df.filter(regex=self.args.sample_column_regex)
-        gene_column = self.args.gene_column_name
-        sample_df[gene_column] = initial_df[gene_column]
+        sample_df[self.args.gene_column_name] = initial_df[self.args.input_gene_column_name]
 
         data_df = pd.DataFrame()
         data_df[_SAMPLE_COUNT] = self.calculate_total_samples(sample_df)
@@ -553,8 +551,8 @@ def _validate_df(initial_df, args):
     elif _DBNSFP_COLUMN not in header and _SNPEFF_COLUMN not in header:
         missing_columns.extend([_DBNSFP_COLUMN, _SNPEFF_COLUMN])
 
-    if args.gene_column_name not in header:
-        missing_columns.append(args.gene_column_name)
+    if args.input_gene_column_name not in header:
+        missing_columns.append(args.input_gene_column_name)
 
     msg = ("Input file is missing required headers ({}). "
            "Review input and try again.").format(missing_columns)
@@ -835,6 +833,9 @@ def _add_arg_parse(args):
     parser.add_argument("--input_dbnsfp_column_name",
                         default=_DBNSFP_COLUMN,
                         help="Name of dbNSFP damaging count column in the input file")
+    parser.add_argument("--input_snpeff_impact_column_name",
+                        default=_SNPEFF_COLUMN,
+                        help="Name of SnpEFF impact column (HIGH, MODERATE, etc.) in the input file")
     parser.add_argument("--version",
                         "-V",
                         action="version",
@@ -843,10 +844,13 @@ def _add_arg_parse(args):
 
 def main():
     args = _add_arg_parse(sys.argv[1:])
+    #TODO: cgates: This is a dumb pattern. Let's get rid of it.
     global _GENE_SYMBOL
-    global _DBNSFP_COLUMN
     _GENE_SYMBOL = args.input_gene_column_name
+    global _DBNSFP_COLUMN
     _DBNSFP_COLUMN = args.input_dbnsfp_column_name
+    global _SNPEFF_COLUMN
+    _SNPEFF_COLUMN = args.input_snpeff_impact_column_name
 
     try:
         _rollup(args)
