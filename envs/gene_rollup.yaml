@@ -1,0 +1,8 @@
+name: gene_rollup
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - colour=0.1.5=py_0
+  - pandas=0.25.1
+  - XlsxWriter=1.2.0

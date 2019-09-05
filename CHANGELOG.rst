@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.3.0 (9/5/2019)
+----------------
+- Significant changes to enable use with VarSeq outputs as well as SnpEff
+
+
 0.2.1 (11/8/2017)
 --------------
 - Added command line arg to specify SNPEff Impact column

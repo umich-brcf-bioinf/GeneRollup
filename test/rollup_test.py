@@ -2,18 +2,19 @@
 #pylint: disable=maybe-no-member, too-few-public-methods, no-member
 from __future__ import absolute_import
 
-from StringIO import StringIO
 from argparse import Namespace
 from collections import OrderedDict
 import filecmp
-import numpy
+from io import StringIO
 import os
 import unittest
+
+import numpy
+import pandas as pd
 
 from testfixtures import TempDirectory
 
 import generollup.rollup as rollup
-import pandas as pd
 
 
 def dataframe(input_data, sep="|", dtype=None):
@@ -1443,8 +1444,8 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected = open(expected_file).readlines()
 
-            print expected
-            print open(output_file).readlines()
+            print(expected)
+            print(open(output_file).readlines())
             for i, actual in enumerate(open(output_file).readlines()):
                 self.assertEquals(expected[i], actual)
 
@@ -1471,8 +1472,8 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected = open(expected_file).readlines()
 
-            print expected
-            print open(output_file).readlines()
+            print(expected)
+            print(open(output_file).readlines())
             for i, actual in enumerate(open(output_file).readlines()):
                 self.assertEquals(expected[i], actual)
 
@@ -1499,7 +1500,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected = open(expected_file).readlines()
 
-            print expected
-            print open(output_file).readlines()
+            print(expected)
+            print(open(output_file).readlines())
             for i, actual in enumerate(open(output_file).readlines()):
                 self.assertEquals(expected[i], actual)
