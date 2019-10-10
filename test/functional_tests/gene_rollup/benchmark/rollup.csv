@@ -1,5 +1,5 @@
-gene symbol	total impacted samples	distinct loci	total mutations	dbNSFP|overall damaging rank	dbNSFP|damaging total	dbNSFP|damaging votes|P1|TUMOR	dbNSFP|damaging votes|P2|TUMOR	dbNSFP|damaging votes|P3|TUMOR	dbNSFP|damaging votes|P4|TUMOR	SnpEff|overall impact rank	SnpEff|overall impact score	SnpEff|impact category|HIGH	SnpEff|impact category|MODERATE	SnpEff|impact category|LOW	SnpEff|impact category|MODIFIER	SnpEff|impact|P1|TUMOR	SnpEff|impact|P2|TUMOR	SnpEff|impact|P3|TUMOR	SnpEff|impact|P4|TUMOR
-CREBBP	1	2	2	1.0	14		14			2.0	1001000	0	1	1	0		lm		
-EGFR	2	1	2	2.0	8		4		4	4.0	2	0	0	0	2		x		x
-BRCA1	1	1	1	3.0	1				1	1.0	1000000000	1	0	0	0				h
-TP53	1	1	1							3.0	1000	0	0	1	0				l
+gene_symbol	total_affected_samples	distinct_variant_loci	total_mutations	dbNSFP_annotation|overall_damaging_rank	dbNSFP_annotation|damaging_total	dbNSFP_annotation|damaging_votes|P1	dbNSFP_annotation|damaging_votes|P2	dbNSFP_annotation|damaging_votes|P3	dbNSFP_annotation|damaging_votes|P4	effect_annotation|overall_effect_rank	effect_annotation|overall_effect_score	effect_annotation|effect_category|HIGH	effect_annotation|effect_category|MODERATE	effect_annotation|effect_category|LOW	effect_annotation|effect_category|MODIFIER	effect_annotation|effect|P1	effect_annotation|effect|P2	effect_annotation|effect|P3	effect_annotation|effect|P4
+CREBBP	1	2	2.0	1.0	14		14			2.0	1001000	0	1	1	0		lm		
+EGFR	2	1	2.0	2.0	8		4		4	4.0	2	0	0	0	2		x		x
+BRCA1	1	1	1.0	3.0	1				1	1.0	1000000000	1	0	0	0				h
+TP53	1	1	1.0							3.0	1000	0	0	1	0				l

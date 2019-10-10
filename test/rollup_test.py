@@ -16,6 +16,8 @@ from testfixtures import TempDirectory
 
 import generollup.rollup as rollup
 
+#TODO: cgates: How about we fix the chained assigments and get rid of this warning suppression.
+pd.set_option('mode.chained_assignment', None)
 
 def dataframe(input_data, sep="|", dtype=None):
     return pd.read_csv(StringIO(input_data), sep=sep, header=0, dtype=dtype)
@@ -34,101 +36,72 @@ class MockFormatRule(object):
         self.last_format_df = format_df
         return self.format_df
 
-class MakeDirsTestCase(unittest.TestCase):
-    def test_create_output_dir_singleLeaf(self):
-        with TempDirectory() as output_dir:
-            dest = os.path.join(output_dir.path, "foo_bar")
-            rollup._create_output_dir(dest)
-            self.assertTrue(os.path.isdir(dest))
-
-    def test_makepath_okIfExists(self):
-        with TempDirectory() as output_dir:
-            dest = output_dir.path
-            rollup._create_output_dir(dest)
-            self.assertTrue(os.path.isdir(dest))
-
-    def test_makepath_createsParents(self):
-        with TempDirectory() as output_dir:
-            dest = os.path.join(output_dir.path, "foo/bar")
-            rollup._create_output_dir(dest)
-            self.assertTrue(os.path.isdir(dest))
-
-    def test_makepath_raisesOnWrongType(self):
-        with TempDirectory() as output_dir:
-            output_dir.write('foo', b'some text')
-            dest = os.path.join(output_dir.path, "foo")
-            self.assertRaises(rollup.UsageError, rollup._create_output_dir, dest)
-
-    def test_makepath_raisesIfExistingParentWrongType(self):
-        with TempDirectory() as output_dir:
-            output_dir.write('foo', b'some text')
-            dest = os.path.join(output_dir.path, "foo/bar")
-            self.assertRaises(rollup.UsageError, rollup._create_output_dir, dest)
-
 class GeneRollupTestCase(unittest.TestCase):
+    def setUp(self):
+        rollup._DBNSFP_COLUMN = 'dbNSFP_rollup_damaging'
+        rollup._EFFECT_COLUMN = 'SNPEFF_TOP_EFFECT_IMPACT'
+        rollup._GENE_SYMBOL = 'GENE_SYMBOL'
+
     def test_create_df(self):
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|sampleA
 1\t2\t3\t4\t5\t6\t7\t8'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
-        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
+        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT|sampleA"],
                             list(actual_df.columns.values))
 
-    def test_create_df_missingDbnsfpAndSnpeffNotOkay(self):
+    def test_create_df_missingDbnsfpAndSnpeffOkay(self):
         input_string =\
-'''headerA\theaderB
-1\t2'''
+'''GENE_SYMBOL\theaderA\theaderB\tJQ_SUMMARY_SOM_COUNT|sampleA
+foo\t1\t2\t0'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
-        self.assertRaisesRegexp(rollup.UsageError,
-                                "Input file is missing required headers",
-                                rollup._create_df,
-                                StringIO(input_string),
-                                args)
-    def test_create_df_missingdbNsfpOkay(self):
+        actual_df = rollup._create_df(StringIO(input_string), args)
+        self.assertEquals(["GENE_SYMBOL", "headerA", "headerB", "JQ_SUMMARY_SOM_COUNT|sampleA"],
+                            list(actual_df.columns.values))
+
+    def test_create_df_missingDbNsfpOkay(self):
         input_string =\
-'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT
+'''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|sampleA|TUMOR
 1\t2\t3'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='SNPEFF_TOP_EFFECT_IMPACT',
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
-        self.assertEquals(["GENE_SYMBOL", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT"],
+        self.assertEquals(["GENE_SYMBOL", "SNPEFF_TOP_EFFECT_IMPACT", "JQ_SUMMARY_SOM_COUNT|sampleA|TUMOR"],
                             list(actual_df.columns.values))
 
-    def test_create_df_missingSnpEffOkay(self):
+    def test_create_df_missingEffectOkay(self):
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|sampleA|TUMOR
 1\t2\t3'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         dbnsfp_column_name='dbNSFP_rollup_damaging',
                          tsv=False)
 
         actual_df = rollup._create_df(StringIO(input_string), args)
-        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT"],
+        self.assertEquals(["GENE_SYMBOL", "dbNSFP_rollup_damaging", "JQ_SUMMARY_SOM_COUNT|sampleA|TUMOR"],
                             list(actual_df.columns.values))
 
     def test_create_df_missingSamples(self):
@@ -139,13 +112,14 @@ class GeneRollupTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(P.)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         dbnsfp_column_name='dbNSFP_rollup_damaging',
+                         effect_column_name='SNPEFF_TOP_EFFECT_IMPACT',
                          tsv=False)
 
         self.assertRaisesRegexp(rollup.UsageError,
-                                "Cannot determine samples from input file with supplied regex",
+                                "Cannot determine sample genotype columns with supplied regex.*",
                                 rollup._create_df,
                                 StringIO(input_string),
                                 args)
@@ -160,7 +134,7 @@ BRCA1\t2\t3
         input_string = input_string.replace("0", numpy.nan)
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          gene_column_name="GENE_SYMBOL",
                          tsv=False)
 
@@ -172,7 +146,7 @@ BRCA1\t2\t3
 
     def test_sort_by_dbnsfp_rank(self):
         input_string =\
-'''gene symbol\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tSnpEff|overall impact rank\tdbNSFP|overall damaging rank
+'''gene_symbol\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\teffect_annotation|overall_effect_rank\tdbNSFP_annotation|overall_damaging_rank
 BRCA1\th\t7\t2
 EGFR\tm\t4\t3
 SON\tm\t5\t1
@@ -181,8 +155,8 @@ CREBBP\thhh\t6\t1'''
         input_df = dataframe(input_string, sep="\t")
         sorted_df = rollup._sort_by_dbnsfp_rank(input_df)
 
-        self.assertEquals(["BRCA2", "SON", "CREBBP", "BRCA1", "EGFR"], list(sorted_df["gene symbol"].values))
-        self.assertEquals([1, 1, 1, 2, 3], list(sorted_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals(["BRCA2", "SON", "CREBBP", "BRCA1", "EGFR"], list(sorted_df["gene_symbol"].values))
+        self.assertEquals([1, 1, 1, 2, 3], list(sorted_df["dbNSFP_annotation|overall_damaging_rank"].values))
 
     def test_combine_dfs(self):
         summary_string =\
@@ -258,7 +232,7 @@ CREBBP\thh'''
 
     def test_reset_style_gene_values(self):
         data_string =\
-'''gene symbol|PATIENT_A_SnpEff
+'''gene_symbol|PATIENT_A_SnpEff
 BRCA1|{"foo": "bar"}
 TANK|{"foo": "bar"}
 CREBBP|{"foo": "bar"}'''
@@ -267,14 +241,14 @@ CREBBP|{"foo": "bar"}'''
         actual = actual.applymap(str)
 
         expected_string =\
-'''gene symbol|PATIENT_A_SnpEff
+'''gene_symbol|PATIENT_A_SnpEff
 {}|{"foo": "bar"}
 {}|{"foo": "bar"}
 {}|{"foo": "bar"}'''
         expected = dataframe(expected_string)
 
-        self.assertEquals(list(expected["gene symbol"].values),
-                          list(actual["gene symbol"].values))
+        self.assertEquals(list(expected["gene_symbol"].values),
+                          list(actual["gene_symbol"].values))
 
         self.assertEquals(list(expected["PATIENT_A_SnpEff"].values),
                           list(actual["PATIENT_A_SnpEff"].values))
@@ -295,9 +269,8 @@ class dbNSFPTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name="GENE_SYMBOL",
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -319,7 +292,7 @@ class dbNSFPTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          )
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -345,7 +318,7 @@ CREBBP\t3\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          gene_column_name=rollup._GENE_SYMBOL,
                          input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
@@ -366,7 +339,7 @@ CREBBP\t3\t0\t.'''
 
         data_df = data_df.applymap(str)
         expected_string =\
-'''GENE_SYMBOL\tdbNSFP|overall damaging rank\tdbNSFP|damaging total\tdbNSFP|damaging votes|P1|TUMOR\tdbNSFP|damaging votes|P2|TUMOR
+'''GENE_SYMBOL\tdbNSFP_annotation|overall_damaging_rank\tdbNSFP_annotation|damaging_total\tdbNSFP_annotation|damaging_votes|P1\tdbNSFP_annotation|damaging_votes|P2
 BRCA1\t1\t9\t2\t7
 CREBBP\t2\t0\t\t'''
         expected_df = dataframe(expected_string, sep="\t", dtype=str)
@@ -383,7 +356,7 @@ CREBBP\t2\t0\t\t'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          gene_column_name=rollup._GENE_SYMBOL,
                          input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
@@ -404,7 +377,7 @@ CREBBP\t.\t0\t.'''
 
         data_df = data_df.applymap(str)
         expected_string =\
-'''GENE_SYMBOL\tdbNSFP|overall damaging rank\tdbNSFP|damaging total\tdbNSFP|damaging votes|P1|TUMOR\tdbNSFP|damaging votes|P2|TUMOR
+'''GENE_SYMBOL\tdbNSFP_annotation|overall_damaging_rank\tdbNSFP_annotation|damaging_total\tdbNSFP_annotation|damaging_votes|P1\tdbNSFP_annotation|damaging_votes|P2
 BRCA1\t1\t1\t\t1'''
         expected_df = dataframe(expected_string, sep="\t", dtype=str)
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
@@ -420,7 +393,7 @@ BRCA1\t1\t1\t\t1'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          gene_column_name=rollup._GENE_SYMBOL,
                          input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
@@ -448,9 +421,8 @@ CREBBP\t3\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule1, formatRule2], args)
@@ -482,16 +454,18 @@ CREBBP\t2\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         dbnsfp_column_name='dbNSFP_rollup_damaging',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
 
         damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(damaging_votes_df.index.values))
-        self.assertEquals(5.0, list(damaging_votes_df["dbNSFP|damaging votes|P1|TUMOR"].values)[0])
-        self.assertTrue(numpy.isnan(list(damaging_votes_df["dbNSFP|damaging votes|P1|TUMOR"].values)[1]))
+        import numpy as np
+        self.assertEquals([2.0, '.'], list(damaging_votes_df["dbNSFP_annotation|damaging_votes|P1"].values))
+        self.assertTrue([8.0, '.'], list(damaging_votes_df["dbNSFP_annotation|damaging_votes|P2"].values))
 
 
     def test_build_damaging_ranks(self):
@@ -506,8 +480,9 @@ CREBBP\t2\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         dbnsfp_column_name='dbNSFP_rollup_damaging',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -516,12 +491,12 @@ CREBBP\t2\t0\t.'''
         ranked_df = dbNSFP._build_damaging_ranks(damaging_votes_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals([1, 2], list(ranked_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals([1, 2], list(ranked_df["dbNSFP_annotation|overall_damaging_rank"].values))
 
     def test_build_damaging_ranks_tie(self):
         FORMAT_DF = pd.DataFrame([[42] * 8] * 2)
         input_string =\
-'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+'''GENE_SYMBOL\tdbNSFP_rollup_damaging\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
 TANK\t2\t.\t1
 BRCA1\t5\t.\t1
 EGFR\t5\t.\t1
@@ -532,8 +507,9 @@ BRCA2\t13\t.\t1'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         dbnsfp_column_name='dbNSFP_rollup_damaging',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         dbNSFP = rollup.dbNSFP([formatRule], args)
@@ -541,9 +517,9 @@ BRCA2\t13\t.\t1'''
         damaging_votes_df = dbNSFP._build_gene_sample_damaging_votes(input_df)
         ranked_df = dbNSFP._build_damaging_ranks(damaging_votes_df)
         self.assertEquals(["BRCA1", "BRCA2", "CREBBP", "EGFR", "TANK"], list(ranked_df.index.values))
-        self.assertEquals([2, 1, 2, 2, 5], list(ranked_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals([2, 1, 2, 2, 5], list(ranked_df["dbNSFP_annotation|overall_damaging_rank"].values))
 
-class SnpEffTestCase(unittest.TestCase):
+class EffectTestCase(unittest.TestCase):
     def setUp(self):
         rollup._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
         rollup._GENE_SYMBOL = "GENE_SYMBOL"
@@ -558,12 +534,13 @@ class SnpEffTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule], args)
+        snpEff = rollup.Effect([formatRule], args)
 
         input_string = \
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tBAZ\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR\tFOO\tBAR'''
@@ -582,11 +559,13 @@ class SnpEffTestCase(unittest.TestCase):
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule], args)
+        effect = rollup.Effect([formatRule], args)
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
@@ -597,7 +576,7 @@ BRCA1\t.\t1\t1
 CREBBP\tMODIFIER\t0\t.'''
 
         input_df = dataframe(input_string, sep="\t")
-        actual = snpEff._remove_invalid_rows(input_df)
+        actual = effect._remove_invalid_rows(input_df)
 
         self.assertEquals(["HIGH", "LOW", "MODIFIER"], list(actual["SNPEFF_TOP_EFFECT_IMPACT"].values))
         self.assertEquals(["1", ".", "0"], list(actual["JQ_SUMMARY_SOM_COUNT|P1|TUMOR"].values))
@@ -609,12 +588,13 @@ CREBBP\tMODIFIER\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule], args)
+        snpEff = rollup.Effect([formatRule], args)
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
@@ -655,12 +635,13 @@ CREBBP|2|0|0|0|0|0||'''.replace("|", "\t")
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule], args)
+        snpEff = rollup.Effect([formatRule], args)
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
@@ -700,12 +681,13 @@ CREBBP|1|0|0|0|0|0||'''.replace("|", "\t")
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule], args)
+        snpEff = rollup.Effect([formatRule], args)
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -728,12 +710,13 @@ CREBBP\tHIGH\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        snpEff = rollup.SnpEff([formatRule1, formatRule2], args)
+        snpEff = rollup.Effect([formatRule1, formatRule2], args)
 
         input_string =\
 '''GENE_SYMBOL\tSNPEFF_TOP_EFFECT_IMPACT\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
@@ -758,69 +741,74 @@ CREBBP\tMODERATE\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        SnpEff = rollup.Effect([MockFormatRule], args)
 
         scored_df = SnpEff._calculate_score(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(scored_df.index.values))
 
         self.assertEquals(["h", ""], list(scored_df["JQ_SUMMARY_SOM_COUNT|P1|TUMOR"]))
         self.assertEquals(["hl", ""], list(scored_df["JQ_SUMMARY_SOM_COUNT|P2|TUMOR"]))
-        int_scores = [int(i) for i in list(scored_df["SnpEff|overall impact score"].values)]
+        int_scores = [int(i) for i in list(scored_df["effect_annotation|overall_effect_score"].values)]
         self.assertEquals([2000001000, 0], int_scores)
 
     def test_get_impact_category_counts(self):
         input_string =\
-'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR
 BRCA1\thh\tl
 CREBBP\tm\t.'''
         input_df = dataframe(input_string, sep="\t")
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name = 'SNPEFF_TOP_EFFECT_IMPACT',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        effect = rollup.Effect([MockFormatRule], args)
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
-        category_df = SnpEff._get_impact_category_counts(grouped_df)
+        category_df = effect._get_effect_category_counts(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(category_df.index.values))
-        self.assertEquals([2, 0], list(category_df["SnpEff|impact category|HIGH"]))
-        self.assertEquals([0, 1], list(category_df["SnpEff|impact category|MODERATE"]))
-        self.assertEquals([1, 0], list(category_df["SnpEff|impact category|LOW"]))
-        self.assertEquals([0, 0], list(category_df["SnpEff|impact category|MODIFIER"]))
+        self.assertEquals([2, 0], list(category_df["effect_annotation|effect_category|HIGH"]))
+        self.assertEquals([0, 1], list(category_df["effect_annotation|effect_category|MODERATE"]))
+        self.assertEquals([1, 0], list(category_df["effect_annotation|effect_category|LOW"]))
+        self.assertEquals([0, 0], list(category_df["effect_annotation|effect_category|MODIFIER"]))
 
     def test_calculate_rank(self):
         input_string =\
-'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\teffect_annotation|overall_effect_score
 BRCA1\thh\tl\t2000001000
 CREBBP\tm\t.\t1000'''
         input_df = dataframe(input_string, sep="\t")
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='foo',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        SnpEff = rollup.Effect([MockFormatRule], args)
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "CREBBP"], list(ranked_df.index.values))
-        self.assertEquals(["1", "2"], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["1", "2"], list(ranked_df["effect_annotation|overall_effect_rank"].values))
 
     def test_calculate_rank_sortsNumerically(self):
         input_string =\
-'''GENE_SYMBOL\tSnpEff|overall impact score
+'''GENE_SYMBOL\teffect_annotation|overall_effect_score
 geneA\t1
 geneB\t10
 geneC\t11
@@ -831,18 +819,20 @@ geneE\t20'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='foo',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        SnpEff = rollup.Effect([MockFormatRule], args)
         ranked_df = SnpEff._calculate_rank(input_df)
 
-        self.assertEquals(["5", "3", "2", "4", "1"], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["5", "3", "2", "4", "1"], list(ranked_df["effect_annotation|overall_effect_rank"].values))
 
     def test_calculate_rank_tie(self):
         input_string =\
-'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT_A|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\teffect_annotation|overall_effect_score
 CREBBP\tm\t.\t1
 TANK\tm\t.\t3
 EGFR\tm\t.\t3
@@ -852,36 +842,40 @@ BRCA1\t.\tm\t12'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='foo',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        SnpEff = rollup.Effect([MockFormatRule], args)
 
         grouped_df = input_df.groupby("GENE_SYMBOL").sum()
         ranked_df = SnpEff._calculate_rank(grouped_df)
 
         self.assertEquals(["BRCA1", "BRCA2", "CREBBP", "EGFR", "TANK"], list(ranked_df.index.values))
-        self.assertEquals(["1", "2", "5", "2", "2"], list(ranked_df["SnpEff|overall impact rank"].values))
+        self.assertEquals(["1", "2", "5", "2", "2"], list(ranked_df["effect_annotation|overall_effect_rank"].values))
 
     def test_change_col_order(self):
         input_string =\
-'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|NORMAL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tSnpEff|overall impact score\tSnpEff|overall impact rank
+'''GENE_SYMBOL\tJQ_SUMMARY_SOM_COUNT|P1|TUMOR\tJQ_SUMMARY_SOM_COUNT|P2|TUMOR\teffect_annotation|overall_effect_score\teffect_annotation|overall_effect_rank
 BRCA1\th\thl\t20000\t1
 CREBBP\tm\t.\t1\t2'''
         input_df = dataframe(input_string, sep="\t")
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name='foo',
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=False)
 
-        SnpEff = rollup.SnpEff([MockFormatRule], args)
+        effect = rollup.Effect([MockFormatRule], args)
 
         indexed_df = input_df.set_index(["GENE_SYMBOL"])
-        rearranged_df = SnpEff._change_col_order(indexed_df)
-        self.assertEquals(["SnpEff|overall impact rank", "SnpEff|overall impact score", "JQ_SUMMARY_SOM_COUNT|P1|NORMAL", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR"],
+        rearranged_df = effect._change_col_order(indexed_df)
+        self.assertEquals(["effect_annotation|overall_effect_rank", "effect_annotation|overall_effect_score", "JQ_SUMMARY_SOM_COUNT|P1|TUMOR", "JQ_SUMMARY_SOM_COUNT|P2|TUMOR"],
                             list(rearranged_df.columns.values))
 
 
@@ -904,7 +898,7 @@ CREBBP\t0\t.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(.*)\|TUMOR',
                          gene_column_name=rollup._GENE_SYMBOL,
                          input_gene_column_name=rollup._GENE_SYMBOL,
                          tsv=False)
@@ -913,9 +907,9 @@ CREBBP\t0\t.'''
         data_df, style_dfs = SummaryColumns.summarize(input_df)
 
         expected_string =\
-'''GENE_SYMBOL\ttotal impacted samples\tdistinct loci\ttotal mutations
-BRCA1\t2\t2\t3
-CREBBP\t0\t1\t0'''
+'''GENE_SYMBOL\ttotal_affected_samples\tdistinct_variant_loci\ttotal_mutations
+BRCA1\t1\t2\t2.0
+CREBBP\t0\t0\t0'''
         expected_df = dataframe(expected_string, sep="\t")
         expected_df = expected_df.set_index(["GENE_SYMBOL"])
         expected_df = expected_df.applymap(str)
@@ -924,9 +918,9 @@ CREBBP\t0\t1\t0'''
         self.assertEquals(1, len(style_dfs))
         self.assertEquals([["", "", ""], ["", "", ""]], [list(i) for i in style_dfs[0].values])
 
-    def test_calculate_total_samples(self):
+    def test_calculate_affected_samples(self):
         input_string =\
-'''GENE_SYMBOL|SampleA|SampleB
+'''gene_symbol|SampleA|SampleB
 BRCA1|1|1
 BRCA1|.|1
 CREBBP|0|.'''
@@ -934,18 +928,18 @@ CREBBP|0|.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='(Sample.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         summary_cols = rollup.SummaryColumns(args)
-        total_variants = summary_cols.calculate_total_samples(input_df)
+        total_variants = summary_cols.calculate_affected_samples(input_df)
 
         self.assertEquals([2, 0], list(total_variants))
 
     def test_calculate_total_mutations_simpleInputMatrix(self):
         input_string =\
-'''GENE_SYMBOL|SampleA|SampleB
+'''gene_symbol|SampleA|SampleB
 BRCA1|1|1
 BRCA1|.|1
 CREBBP|0|.'''
@@ -953,8 +947,8 @@ CREBBP|0|.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='(Sample.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         summary_cols = rollup.SummaryColumns(args)
@@ -965,7 +959,7 @@ CREBBP|0|.'''
 
     def test_calculate_total_mutations_integerInputMatrix(self):
         input_string =\
-'''GENE_SYMBOL|SampleA|SampleB
+'''gene_symbol|SampleA|SampleB
 BRCA1|2|1
 BRCA1|.|3
 CREBBP|0|.'''
@@ -973,8 +967,8 @@ CREBBP|0|.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='(Sample.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         summary_cols = rollup.SummaryColumns(args)
@@ -985,7 +979,7 @@ CREBBP|0|.'''
 
     def test_calculate_total_mutations_floatInputMatrix(self):
         input_string =\
-'''GENE_SYMBOL|SampleA|SampleB
+'''gene_symbol|SampleA|SampleB
 BRCA1|0.5|0.75
 BRCA1|.|0.1
 CREBBP|0|.'''
@@ -993,8 +987,8 @@ CREBBP|0|.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='(Sample.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         summary_cols = rollup.SummaryColumns(args)
@@ -1006,7 +1000,7 @@ CREBBP|0|.'''
 
     def test_calculate_total_loci(self):
         input_string =\
-'''GENE_SYMBOL|SampleA|SampleB
+'''gene_symbol|SampleA|SampleB
 BRCA1|1|1
 BRCA1|.|1
 CREBBP|0|.'''
@@ -1014,17 +1008,17 @@ CREBBP|0|.'''
 
         args = Namespace(input_file="",
                          output_file="",
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='(Sample.*)',
+                         gene_column_name='GENE_SYMBOL',
                          tsv=False)
 
         summary_cols = rollup.SummaryColumns(args)
-        total_loci = summary_cols.calculate_total_loci(input_df)
+        total_loci = summary_cols.calculate_variant_loci(input_df)
         self.assertEquals(["BRCA1", "CREBBP"], list(total_loci.index.values))
-        self.assertEquals([2, 1], list(total_loci))
+        self.assertEquals([2, 0], list(total_loci))
 
 
-class SnpEffFormatRuleTestCase(unittest.TestCase):
+class EffectFormatRuleTestCase(unittest.TestCase):
     def test_format_invalidDataMatrix(self):
         input_string =\
 '''GENE_SYMBOL|PATIENT_A|SnpEff_overall_impact_rank
@@ -1032,7 +1026,7 @@ HIGH1|z|1
 HIGH2|1|1'''
         data_df = dataframe(input_string)
         data_df = data_df.set_index(["GENE_SYMBOL"])
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_df = rule.format(data_df)
 
         actual_values = list(actual_df.values)
@@ -1054,7 +1048,7 @@ NULL1\t\t'''
         data_df = dataframe(input_string, sep="\t")
         data_df = data_df.set_index(["GENE_SYMBOL"])
 
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_df = rule.format(data_df)
 
         expected_index = ["MOD", "HIGH", "NULL1"]
@@ -1085,7 +1079,7 @@ MOD2|xx|1
 NULL1|.|1'''
         data_df = dataframe(input_string)
         data_df = data_df.set_index(["GENE_SYMBOL"])
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         rule._style = lambda x: x
         actual_df = rule.format(data_df)
 
@@ -1108,7 +1102,7 @@ NULL1||'''
 
     def test_style_high(self):
         cell_value = "h"
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
                           "bg_color": "#003366",
@@ -1118,7 +1112,7 @@ NULL1||'''
 
     def test_style_moderate(self):
         cell_value = "m"
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
                           "bg_color": "#3377B9",
@@ -1128,7 +1122,7 @@ NULL1||'''
 
     def test_style_low(self):
         cell_value = "l"
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
                           "bg_color": "#91C4E8",
@@ -1138,7 +1132,7 @@ NULL1||'''
 
     def test_style_modifier(self):
         cell_value = "x"
-        rule = rollup.SnpEffFormatRule()
+        rule = rollup.EffectFormatRule()
         actual_style = rule._style(cell_value)
         expected_style = {"font_size": "4",
                           "bg_color": "#CCCCCC",
@@ -1150,7 +1144,7 @@ NULL1||'''
 class dbNSFPFormatRuleTestCase(unittest.TestCase):
     def test_format_style(self):
         input_string =\
-'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank\tdbNSFP|damaging total
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP_annotation|overall_damaging_rank\tdbNSFP_annotation|damaging_total
 GENE1\t\t\t1
 GENE2\t53\t1\t1
 GENE3\t94\t1\t2'''
@@ -1167,7 +1161,7 @@ GENE3\t94\t1\t2'''
                                   {"font_size": "12", "bg_color": "orange", "font_color": "#000000"}]
         self.assertEquals(expected_patient_cells, list(actual_df["PATIENT_A"].values))
 
-        actual_values = list(actual_df["dbNSFP|overall damaging rank"].values)
+        actual_values = list(actual_df["dbNSFP_annotation|overall_damaging_rank"].values)
         self.assertEquals(3, len(actual_values))
 
         pd.isnull(actual_values[0])
@@ -1176,7 +1170,7 @@ GENE3\t94\t1\t2'''
 
     def test_format_standalone(self):
         input_string =\
-'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank\tdbNSFP|damaging total
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP_annotation|overall_damaging_rank\tdbNSFP_annotation|damaging_total
 GENE1\t3\t1\t1
 GENE2\t53\t1\t1
 GENE3\t94\t1\t1
@@ -1190,10 +1184,10 @@ GENE6\t2\t1\t1'''
 
         rollup._SAMPLENAME_REGEX = "PATIENT.*"
         actual_df = rule.format(data_df)
-        actual_df = actual_df.drop("dbNSFP|damaging total", 1)
+        actual_df = actual_df.drop("dbNSFP_annotation|damaging_total", 1)
 
         expected_string = \
-'''GENE_SYMBOL\tPATIENT_A\tdbNSFP|overall damaging rank
+'''GENE_SYMBOL\tPATIENT_A\tdbNSFP_annotation|overall_damaging_rank
 GENE1\t\t
 GENE2\t\t
 GENE3\t\t
@@ -1251,7 +1245,7 @@ GENE6\t\t'''
 class RankFormatRuleTestCase(unittest.TestCase):
     def test_format_style(self):
         input_string =\
-'''GENE_SYMBOL\tdbNSFP|overall damaging rank
+'''GENE_SYMBOL\tdbNSFP_annotation|overall_damaging_rank
 GENE1\t1
 GENE2\t
 GENE3\t6'''
@@ -1266,7 +1260,7 @@ GENE3\t6'''
         expected_patient_cells = [{"font_size": "12", "bg_color": "#e27171", "font_color": "#000000"},
                                   numpy.nan,
                                   {"font_size": "12", "bg_color": "white", "font_color": "#000000"}]
-        self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP|overall damaging rank"].values))
+        self.assertEquals(expected_patient_cells, list(actual_df["dbNSFP_annotation|overall_damaging_rank"].values))
 
     def test_format_styleAllTies(self):
         input_string =\
@@ -1290,7 +1284,7 @@ GENE3\t1'''
 
     def test_format_standalone(self):
         input_string =\
-'''GENE_SYMBOL\tSnpEff|overall impact rank
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank
 GENE1\t3
 GENE2\t157
 GENE3\t52'''
@@ -1302,7 +1296,7 @@ GENE3\t52'''
         actual_df = rule.format(data_df)
 
         expected_string = \
-'''GENE_SYMBOL\tSnpEff|overall impact rank
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank
 GENE1\t0
 GENE2\t100
 GENE3\t31'''
@@ -1317,7 +1311,7 @@ GENE3\t31'''
 
     def test_format_rankColumnOnly(self):
         input_string =\
-'''GENE_SYMBOL\tSnpEff|overall impact rank\tfoo
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank\tfoo
 GENE1\t3\t1
 GENE2\t157\t1
 GENE3\t52\t1'''
@@ -1329,7 +1323,7 @@ GENE3\t52\t1'''
         actual_df = rule.format(data_df)
 
         expected_string = \
-'''GENE_SYMBOL\tSnpEff|overall impact rank\tfoo
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank\tfoo
 GENE1\t0\t
 GENE2\t100\t
 GENE3\t31\t'''
@@ -1345,7 +1339,7 @@ GENE3\t31\t'''
 
     def test_format_multipleRankColumns(self):
         input_string =\
-'''GENE_SYMBOL\tSnpEff|overall impact rank\tdbNSFP|overall damaging rank
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank\tdbNSFP_annotation|overall_damaging_rank
 GENE1\t3\t1
 GENE2\t157\t58
 GENE3\t52\t93'''
@@ -1357,7 +1351,7 @@ GENE3\t52\t93'''
         actual_df = rule.format(data_df)
 
         expected_string = \
-'''GENE_SYMBOL\tSnpEff|overall impact rank\tdbNSFP|overall damaging rank
+'''GENE_SYMBOL\teffect_annotation|overall_effect_rank\tdbNSFP_annotation|overall_damaging_rank
 GENE1\t0\t0
 GENE2\t100\t61
 GENE3\t31\t100'''
@@ -1416,6 +1410,8 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
         rollup._SAMPLENAME_REGEX = "JQ_SUMMARY_SOM_COUNT.*"
         rollup._GENE_SYMBOL = "GENE_SYMBOL"
         rollup._XLSX = False
+        rollup._DBNSFP_COLUMN = 'dbNSFP_rollup_damaging'
+        rollup._EFFECT_COLUMN = 'SNPEFF_TOP_EFFECT_IMPACT'
 
     def tearDown(self):
         pass
@@ -1430,14 +1426,17 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected_file = os.path.join(module_testdir, "benchmark", "rollup.csv")
 
-            rollup._DESIRED_ANNOTATIONS = set([rollup._DBNSFP_COLUMN,
-                                                     rollup._SNPEFF_COLUMN])
+            dbnsfp_column = 'dbNSFP_rollup_damaging'
+            effect_column = 'SNPEFF_TOP_EFFECT_IMPACT'
+            rollup._DESIRED_ANNOTATIONS = set([dbnsfp_column, effect_column])
 
             args = Namespace(input_file=input_file,
                          output_file=output_file,
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(P.)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         dbnsfp_column_name=dbnsfp_column,
+                         effect_column_name=effect_column,
+                         effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(','),
                          tsv=True)
 
             rollup._rollup(args)
@@ -1447,6 +1446,7 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
             print(expected)
             print(open(output_file).readlines())
             for i, actual in enumerate(open(output_file).readlines()):
+                self.maxDiff=None
                 self.assertEquals(expected[i], actual)
 
     def test_rollup_onlySnpEff(self):
@@ -1459,13 +1459,16 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected_file = os.path.join(module_testdir, "benchmark", "SnpEff_only_rollup.csv")
 
-            rollup._DESIRED_ANNOTATIONS = set([rollup._SNPEFF_COLUMN])
+            effect_column = 'SNPEFF_TOP_EFFECT_IMPACT'
+            effect_column_values='HIGH,MODERATE,LOW,MODIFIER'.split(',')
+            rollup._DESIRED_ANNOTATIONS = set([effect_column])
 
             args = Namespace(input_file=input_file,
                          output_file=output_file,
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(P.)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         effect_column_name=effect_column,
+                         effect_column_values=effect_column_values,
                          tsv=True)
 
             rollup._rollup(args)
@@ -1487,13 +1490,14 @@ class GeneRollupFunctionalTestCase(unittest.TestCase):
 
             expected_file = os.path.join(module_testdir, "benchmark", "dbNSFP_only_rollup.csv")
 
-            rollup._DESIRED_ANNOTATIONS = set([rollup._DBNSFP_COLUMN])
+            dbnsfp_column = 'dbNSFP_rollup_damaging'
+            rollup._DESIRED_ANNOTATIONS = set([dbnsfp_column])
 
             args = Namespace(input_file=input_file,
                          output_file=output_file,
-                         sample_column_regex=rollup._SAMPLENAME_REGEX,
-                         gene_column_name=rollup._GENE_SYMBOL,
-                         input_gene_column_name=rollup._GENE_SYMBOL,
+                         sample_genotype_column_regex='JQ_SUMMARY_SOM_COUNT\|(P.)\|TUMOR',
+                         gene_column_name='GENE_SYMBOL',
+                         dbnsfp_column_name=dbnsfp_column,
                          tsv=True)
 
             rollup._rollup(args)

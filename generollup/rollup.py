@@ -208,13 +208,13 @@ class Effect(object):
         self.name = 'effect_annotation'
         self.args = args
         self.column_label = 'effect'
-        self.effect_column = _EFFECT_COLUMN
         self.effect_rank_column = 'overall_effect_rank'
         self.effect_score_column = 'overall_effect_score'
         self.effect_category = 'effect_category'
         self.format_rules = format_rules
         #TODO: cgates: "If guard" is ugly hack to allow the no-arg constructors in styling code
         if args:
+            self.effect_column = args.effect_column_name
             self._rank_scores = {args.effect_column_values[0]: 10**9,
                                  args.effect_column_values[1]: 10**6,
                                  args.effect_column_values[2]: 10**3,
@@ -311,10 +311,11 @@ class Effect(object):
 
         effect_category_name = '|'.join([self.name, self.effect_category])
         category_df = initial_df.copy()
-        category_df[effect_category_name + '|LoF'] = _count_category('h')
-        category_df[effect_category_name + '|Missense'] = _count_category('m')
-        category_df[effect_category_name + '|Other'] = _count_category('l')
-        category_df[effect_category_name + '|Missing'] = _count_category('x')
+        effect = self.args.effect_column_values
+        category_df[effect_category_name + '|' + effect[0]] = _count_category('h')
+        category_df[effect_category_name + '|' + effect[1]] = _count_category('m')
+        category_df[effect_category_name + '|' + effect[2]] = _count_category('l')
+        category_df[effect_category_name + '|' + effect[3]] = _count_category('x')
 
         return category_df
 
@@ -581,7 +582,7 @@ def _create_df(input_file, args):
     _info('read {} ({} variant loci x {} columns)', input_file, *initial_df.shape)
 
     #TODO: cgates: as implemented, you must do this, but consider an refactor which would remove this side-effect
-    if args.gene_column_index:
+    if  vars(args).get('gene_column_index'):
         args.gene_column_name = initial_df.columns.values[args.gene_column_index-1]
         global _GENE_SYMBOL
         _GENE_SYMBOL = args.gene_column_name
@@ -598,11 +599,11 @@ def _validate_df(initial_df, args):
 
     required_columns['gene_column_name'] = args.gene_column_name
 
-    if args.dbnsfp_column_name:
+    if vars(args).get('dbnsfp_column_name'):
         _DESIRED_ANNOTATIONS.add(args.dbnsfp_column_name)
         required_columns['dbnsfp_column_name'] = args.dbnsfp_column_name
 
-    if args.effect_column_name:
+    if vars(args).get('effect_column_name'):
         _DESIRED_ANNOTATIONS.add(args.effect_column_name)
         required_columns['effect_column_name'] = args.effect_column_name
 
