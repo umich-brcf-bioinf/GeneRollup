@@ -1,11 +1,11 @@
 Installing GeneRollup
 =====================
-GeneRollup has been tested with Python 2.7 on \*nix, Windows, and OSX.
+GeneRollup has been tested with Python 3 on \*nix, Windows, and OSX.
 
 Prerequisites
 -------------
 * pandas
-* colour 
+* colour
 * nosetests, testfixtures (3.0.2) are required for running
   automated tests
 * Note that pip installs all required libraries; see [Installing] below.
@@ -30,4 +30,3 @@ github and run directly from the source like so:
 ``$ git clone https://github.com/umich-brcf-bioinf/GeneRollup``
 
 ``$ GeneRollup/rollup-runner.py input.tsv output.xlsx``
-

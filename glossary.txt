@@ -29,19 +29,19 @@ samples. Lower rank implies greater impact
 ---
 
 COLUMN NAME	DESCRIPTION
-gene symbol:	Gene symbol
-total impacted samples:	Total number of samples at each gene
-total impacted variants:	Total number of variants at each gene. A variant is
+gene_symbol:	Gene symbol
+total_affected_samples:	Total number of samples at each gene
+total_variant_loci:	Total number of distinct variants at each gene. A variant is
 	defined as the unique set of [chromosome, position, ref, alt]
-dbNSFP|overall damaging rank:	Determined by the sum of the damaging votes
+total_mutations: the sum total of all variants across all samples for this gene
+dbNSFP_annotation|overall_damaging_rank:	Determined by the sum of the damaging votes
 	across samples. Lower rank implies greater impact
-dbNSFP|damaging votes|<sample>:	Sum of all of the dbNSFP damaging votes for the
+dbNSFP_annotation|damaging_votes|<sample>:	Sum of all of the dbNSFP damaging votes for the
 	sample
-SnpEff|overall impact rank:	Derived from the SnpEff impact category, such that
-	HIGH is weighted most and MODERATE is weighted least. Lower rank implies
+effect_annotation|overall_effect_rank:	Derived from the effect impact category, such that
+	HIGH is weighted most and MODIFIER is weighted least. Lower rank implies
 	greater impact
-SnpEff|impact|<sample>:	Aggregation of SnpEff categories, where HIGH=h,
+effect_annotation|effect|<sample>:	Aggregation of effect categories, where HIGH=h,
 	MODERATE=m, LOW=l, and MODIFIER=x
-SnpEff|impact category|<category>:	Sum of all of the SnpEff categories across
+effect_annotation|effect_category|<category>:	Sum count of each effect categories across
 	samples
-

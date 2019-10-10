@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.3.1 (10/10/2019)
+----------------
+- Minor refactors to correct automated unit/functional tests.
+- Updated requirements to correct pandas version.
+- Updated README, INSTALL, AUTHORS, glossary.
+
 0.3.0 (9/5/2019)
 ----------------
 - Significant changes to enable use with VarSeq outputs as well as SnpEff
