@@ -1,8 +1,12 @@
 Changelog
 =========
 
+0.3.2 (10/14/2019)
+------------------
+- Fixed setup to use correct doc
+
 0.3.1 (10/10/2019)
-----------------
+------------------
 - Minor refactors to correct automated unit/functional tests.
 - Updated requirements to correct pandas version.
 - Updated README, INSTALL, AUTHORS, glossary.
@@ -13,7 +17,7 @@ Changelog
 
 
 0.2.1 (11/8/2017)
---------------
+-----------------
 - Added command line arg to specify SNPEff Impact column
 
 0.2 (1/7/2016)
